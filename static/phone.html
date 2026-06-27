@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Phone</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="/js/common.js"></script>
+<style id="baseStyle"></style>
+<style>
+/* dialpad view */
+.dialpad-wrap{flex:1;display:flex;flex-direction:column;align-items:center;padding:16px 20px;gap:12px;overflow:hidden}
+.number-display{width:100%;text-align:center;font-size:26px;font-weight:300;
+  color:var(--txt);letter-spacing:2px;min-height:40px;word-break:break-all}
+.number-hint{font-size:11px;color:var(--green);text-align:center;min-height:16px}
+.pad{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;width:100%;max-width:260px}
+.pkey{height:52px;border-radius:50%;border:none;background:var(--panel);
+  color:var(--txt);font-size:20px;font-weight:400;cursor:pointer;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  border:0.5px solid var(--border-c);transition:background 0.1s}
+.pkey:active{background:#2e2e3a}
+.pkey sub{font-size:8px;color:var(--muted);letter-spacing:1px;line-height:1}
+.pad-actions{display:flex;align-items:center;justify-content:space-between;
+  width:100%;max-width:260px}
+.call-btn{width:60px;height:60px;border-radius:50%;border:none;
+  background:#16a34a;color:#fff;font-size:26px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer}
+.call-btn:active{opacity:0.8}
+.del-btn{width:44px;height:44px;border-radius:50%;border:0.5px solid var(--border-c);
+  background:transparent;color:var(--muted);font-size:20px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer}
+.del-btn:active{background:var(--panel)}
+.spacer{width:44px}
+
+/* in-call view */
+.call-screen{flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:space-between;padding:30px 20px 36px}
+.caller-info{display:flex;flex-direction:column;align-items:center;gap:12px}
+.caller-av{width:72px;height:72px;font-size:26px}
+.caller-name{font-size:22px;font-weight:400;color:var(--txt)}
+.caller-num{font-size:13px;color:var(--muted)}
+.call-status{font-size:13px;color:var(--green)}
+.call-timer{font-size:32px;font-weight:300;color:var(--txt);letter-spacing:2px}
+.call-actions{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;width:100%}
+.caction{display:flex;flex-direction:column;align-items:center;gap:6px;cursor:pointer}
+.caction-btn{width:52px;height:52px;border-radius:50%;
+  background:var(--panel);border:0.5px solid var(--border-c);
+  color:var(--txt);font-size:22px;display:flex;align-items:center;justify-content:center}
+.caction-btn.active{background:#1d4ed8;border-color:#1d4ed8}
+.caction-btn.red{background:#dc2626;border-color:#dc2626}
+.caction label{font-size:10px;color:var(--muted)}
+.hangup-row{display:flex;justify-content:center}
+.hangup-btn{width:68px;height:68px;border-radius:50%;border:none;
+  background:#dc2626;color:#fff;font-size:28px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer}
+.hangup-btn:active{opacity:0.8}
+
+/* call log placeholder */
+.log-list{flex:1;overflow-y:auto}
+.log-item{display:flex;align-items:center;gap:10px;padding:10px;
+  border-bottom:0.5px solid var(--border-c)}
+.log-icon{width:32px;height:32px;border-radius:50%;background:var(--panel);
+  display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0}
+.log-body{flex:1;min-width:0}
+.log-name{font-size:13px;font-weight:500}
+.log-meta{font-size:11px;color:var(--muted)}
+.log-icon.missed{color:var(--red)}
+.log-icon.out{color:var(--green)}
+.log-icon.in{color:var(--accent)}
+.tab-bar{display:flex;border-bottom:0.5px solid var(--border-c);flex-shrink:0}
+.tab{flex:1;padding:10px;text-align:center;font-size:12px;color:var(--muted);
+  cursor:pointer;border-bottom:2px solid transparent}
+.tab.active{color:var(--txt);border-bottom-color:var(--accent)}
+</style>
+</head>
+<body>
+<div class="screen">
+  <div class="sbar">
+    <span id="sbCarrier">--- · ---</span>
+    <div class="sig">
+      <span class="sig-bar" style="height:4px"></span>
+      <span class="sig-bar" style="height:6px"></span>
+      <span class="sig-bar" style="height:8px"></span>
+      <span class="sig-bar" style="height:10px"></span>
+      <span class="sig-bar" style="height:12px"></span>
+    </div>
+    <span id="sbClock">--:--</span>
+  </div>
+
+  <!-- dialpad view -->
+  <div class="view" id="viewDial">
+    <div class="topbar">
+      <button class="ibtn" onclick="window.location.href='/'" aria-label="Home"><i class="ti ti-home"></i></button>
+      <span class="topbar-title">Phone</span>
+      <button class="ibtn" onclick="showContacts()" aria-label="Contacts"><i class="ti ti-address-book"></i></button>
+    </div>
+    <div class="tab-bar">
+      <div class="tab active" onclick="switchTab('dial')">Keypad</div>
+      <div class="tab" onclick="switchTab('log')">Recents</div>
+    </div>
+    <div id="tabDial" style="display:flex;flex-direction:column;flex:1;overflow:hidden">
+      <div class="dialpad-wrap">
+        <div class="number-display" id="numDisplay"></div>
+        <div class="number-hint"   id="numHint"></div>
+        <div class="pad">
+          <button class="pkey" onclick="press('1')">1<sub></sub></button>
+          <button class="pkey" onclick="press('2')">2<sub>ABC</sub></button>
+          <button class="pkey" onclick="press('3')">3<sub>DEF</sub></button>
+          <button class="pkey" onclick="press('4')">4<sub>GHI</sub></button>
+          <button class="pkey" onclick="press('5')">5<sub>JKL</sub></button>
+          <button class="pkey" onclick="press('6')">6<sub>MNO</sub></button>
+          <button class="pkey" onclick="press('7')">7<sub>PQRS</sub></button>
+          <button class="pkey" onclick="press('8')">8<sub>TUV</sub></button>
+          <button class="pkey" onclick="press('9')">9<sub>WXYZ</sub></button>
+          <button class="pkey" onclick="press('*')">*<sub></sub></button>
+          <button class="pkey" onclick="press('0')">0<sub>+</sub></button>
+          <button class="pkey" onclick="press('#')">#<sub></sub></button>
+        </div>
+        <div class="pad-actions">
+          <div class="spacer"></div>
+          <button class="call-btn" onclick="makeCall()" aria-label="Call">
+            <i class="ti ti-phone"></i>
+          </button>
+          <button class="del-btn" onclick="del()" aria-label="Delete">
+            <i class="ti ti-backspace"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+    <div id="tabLog" style="display:none;flex-direction:column;flex:1;overflow:hidden">
+      <div class="log-list" id="logList">
+        <div style="text-align:center;padding:40px 0;color:var(--muted);font-size:12px">
+          <i class="ti ti-clock" style="font-size:32px;opacity:0.3;display:block;margin-bottom:8px"></i>
+          Call log coming soon
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- in-call view -->
+  <div class="view hidden" id="viewCall">
+    <div class="call-screen">
+      <div class="caller-info">
+        <div class="av caller-av" id="callAv"></div>
+        <div class="caller-name" id="callName">---</div>
+        <div class="caller-num"  id="callNum"></div>
+        <div class="call-status" id="callStatus">Calling...</div>
+        <div class="call-timer hidden" id="callTimer">0:00</div>
+      </div>
+      <div>
+        <div class="call-actions">
+          <div class="caction">
+            <div class="caction-btn" id="btnMute" onclick="toggleMute()"><i class="ti ti-microphone-off"></i></div>
+            <label>Mute</label>
+          </div>
+          <div class="caction">
+            <div class="caction-btn" id="btnSpk" onclick="toggleSpeaker()"><i class="ti ti-volume"></i></div>
+            <label>Speaker</label>
+          </div>
+          <div class="caction">
+            <div class="caction-btn" onclick="window.location.href='sms.html'"><i class="ti ti-message-2"></i></div>
+            <label>Message</label>
+          </div>
+        </div>
+        <div style="height:20px"></div>
+        <div class="hangup-row">
+          <button class="hangup-btn" onclick="hangup()" aria-label="Hang up">
+            <i class="ti ti-phone-off"></i>
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+document.getElementById("baseStyle").textContent = BASE_CSS;
+StatusBar.init();
+
+let digits   = "";
+let callTimer = null;
+let callSecs  = 0;
+let muted     = false;
+let speaker   = false;
+
+async function init() {
+  await Contacts.load();
+  // if opened from SMS app with ?calling=number
+  const params = new URLSearchParams(window.location.search);
+  const calling = params.get("calling");
+  if (calling) {
+    digits = calling;
+    updateDisplay();
+    await makeCall();
+  }
+  // SSE for incoming ring
+  SSE.on("ring", d => {
+    digits = d.from || "";
+    updateDisplay();
+    showCallScreen(d.from || "", "incoming");
+    document.getElementById("callStatus").textContent = "Incoming call...";
+  });
+  SSE.connect();
+}
+
+function press(k) {
+  if (digits.length >= 15) return;
+  digits += k;
+  updateDisplay();
+}
+
+function del() {
+  digits = digits.slice(0, -1);
+  updateDisplay();
+}
+
+function updateDisplay() {
+  document.getElementById("numDisplay").textContent = digits;
+  if (digits.length >= 3) {
+    const norm = normalizeNumber(digits);
+    const c    = Contacts.findByNumber(norm);
+    document.getElementById("numHint").textContent = c ? c.name : (digits.startsWith("0") ? formatDisplay(digits) : "");
+  } else {
+    document.getElementById("numHint").textContent = "";
+  }
+}
+
+async function makeCall() {
+  if (!digits) { toast("Enter a number"); return; }
+  const number = normalizeNumber(digits);
+  try {
+    const d = await (await fetch("/api/call/dial", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ number })
+    })).json();
+    if (d.ok) {
+      showCallScreen(number, "outgoing");
+    } else {
+      toast("Call failed: " + (d.error||""));
+    }
+  } catch(e) { toast("Backend unreachable"); }
+}
+
+function showCallScreen(number, direction) {
+  const name  = Contacts.resolveName(number);
+  const color = Contacts.resolveColor(number);
+  const av    = document.getElementById("callAv");
+  av.textContent       = Contacts.initials(name);
+  av.style.background  = color;
+  document.getElementById("callName").textContent   = name;
+  document.getElementById("callNum").textContent    = formatDisplay(number);
+  document.getElementById("callStatus").textContent = direction === "incoming" ? "Incoming..." : "Calling...";
+  document.getElementById("callTimer").classList.add("hidden");
+  document.getElementById("viewDial").classList.add("hidden");
+  document.getElementById("viewCall").classList.remove("hidden");
+  if (direction === "outgoing") startTimer();
+}
+
+function startTimer() {
+  callSecs = 0;
+  document.getElementById("callStatus").textContent = "Connected";
+  document.getElementById("callTimer").classList.remove("hidden");
+  callTimer = setInterval(() => {
+    callSecs++;
+    const m = Math.floor(callSecs / 60);
+    const s = String(callSecs % 60).padStart(2,"0");
+    document.getElementById("callTimer").textContent = m + ":" + s;
+  }, 1000);
+}
+
+async function hangup() {
+  clearInterval(callTimer);
+  try { await fetch("/api/call/hangup", {method:"POST"}); } catch(e) {}
+  document.getElementById("viewCall").classList.add("hidden");
+  document.getElementById("viewDial").classList.remove("hidden");
+  digits = "";
+  updateDisplay();
+}
+
+function toggleMute() {
+  muted = !muted;
+  document.getElementById("btnMute").classList.toggle("active", muted);
+  toast(muted ? "Muted" : "Unmuted");
+  // TODO: AT+CMUT=1 / AT+CMUT=0
+}
+
+function toggleSpeaker() {
+  speaker = !speaker;
+  document.getElementById("btnSpk").classList.toggle("active", speaker);
+  toast(speaker ? "Speaker on" : "Speaker off");
+  // TODO: AT+CLVL / audio routing
+}
+
+function switchTab(tab) {
+  document.querySelectorAll(".tab").forEach((t,i) => t.classList.toggle("active", (i===0&&tab==="dial")||(i===1&&tab==="log")));
+  document.getElementById("tabDial").style.display = tab==="dial" ? "flex" : "none";
+  document.getElementById("tabLog").style.display  = tab==="log"  ? "flex" : "none";
+}
+
+function showContacts() { window.location.href = "contacts.html"; }
+
+init();
+</script>
+</body>
+</html>

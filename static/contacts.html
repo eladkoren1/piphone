@@ -1,0 +1,266 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Contacts</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="/js/common.js"></script>
+<style id="baseStyle"></style>
+<style>
+.search-wrap{padding:8px 10px;border-bottom:0.5px solid var(--border-c);flex-shrink:0}
+.search-input{background:var(--input-bg);border:0.5px solid var(--border-c);
+  border-radius:20px;padding:7px 12px;font-size:12px;outline:none;
+  color:var(--txt);width:100%;font-family:inherit}
+.search-input::placeholder{color:var(--muted)}
+.clist{flex:1;overflow-y:auto}
+.clist::-webkit-scrollbar{width:3px}
+.clist::-webkit-scrollbar-thumb{background:var(--border-c)}
+.contact-row{display:flex;align-items:center;gap:10px;padding:10px;
+  border-bottom:0.5px solid var(--border-c);cursor:pointer}
+.contact-row:active{background:var(--panel)}
+.contact-body{flex:1;min-width:0}
+.contact-name{font-size:13px;font-weight:500}
+.contact-num{font-size:11px;color:var(--muted);margin-top:1px}
+.section-head{padding:5px 10px;font-size:10px;color:var(--muted);
+  background:var(--bg);border-bottom:0.5px solid var(--border-c);
+  text-transform:uppercase;letter-spacing:1px}
+.empty{flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:8px;color:var(--muted)}
+.empty i{font-size:36px;opacity:0.3}
+
+/* detail / edit sheet */
+.overlay{position:absolute;inset:0;background:rgba(0,0,0,0.65);
+  display:flex;align-items:flex-end;z-index:20}
+.sheet{width:100%;background:var(--panel);border-radius:12px 12px 0 0;
+  padding:14px 12px 24px;border-top:0.5px solid var(--border-c);max-height:80vh;overflow-y:auto}
+.sheet-header{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+.sheet h3{font-size:14px;font-weight:500;flex:1}
+.field-label{font-size:10px;color:var(--muted);margin-bottom:4px;margin-top:12px}
+.field-label:first-of-type{margin-top:0}
+.color-row{display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.color-swatch{width:26px;height:26px;border-radius:50%;cursor:pointer;
+  border:2px solid transparent;transition:border-color 0.1s}
+.color-swatch.selected{border-color:#fff}
+.btn-row{display:flex;gap:8px;margin-top:16px}
+.btn-row .btn{flex:1}
+.action-row{display:flex;gap:8px;margin-top:8px}
+.action-row .btn{flex:1;display:flex;align-items:center;justify-content:center;gap:6px}
+</style>
+</head>
+<body>
+<div class="screen">
+  <div class="sbar">
+    <span id="sbCarrier">--- · ---</span>
+    <div class="sig">
+      <span class="sig-bar" style="height:4px"></span>
+      <span class="sig-bar" style="height:6px"></span>
+      <span class="sig-bar" style="height:8px"></span>
+      <span class="sig-bar" style="height:10px"></span>
+      <span class="sig-bar" style="height:12px"></span>
+    </div>
+    <span id="sbClock">--:--</span>
+  </div>
+
+  <div class="view" id="viewList">
+    <div class="topbar">
+      <button class="ibtn" onclick="window.location.href='/'" aria-label="Home"><i class="ti ti-home"></i></button>
+      <span class="topbar-title">Contacts</span>
+      <button class="ibtn" onclick="showAdd()" aria-label="Add contact"><i class="ti ti-plus"></i></button>
+    </div>
+    <div class="search-wrap">
+      <input class="search-input" placeholder="Search" oninput="filterList(this.value)" />
+    </div>
+    <div class="clist" id="clist">
+      <div class="empty"><i class="ti ti-loader"></i></div>
+    </div>
+  </div>
+
+  <!-- add / edit overlay -->
+  <div class="overlay hidden" id="editOverlay" onclick="overlayBg(event)">
+    <div class="sheet" id="editSheet">
+      <div class="sheet-header">
+        <div class="av" id="editAv" style="width:40px;height:40px;font-size:15px"></div>
+        <h3 id="editTitle">New contact</h3>
+        <button class="ibtn" onclick="hideEdit()"><i class="ti ti-x"></i></button>
+      </div>
+      <div class="field-label">Name</div>
+      <input id="editName" placeholder="Full name" oninput="updateEditAv()" />
+      <div class="field-label">Number</div>
+      <input id="editNum"  placeholder="054..." type="tel" oninput="updateEditHint()" />
+      <div id="editHint" style="font-size:10px;color:var(--green);margin-top:4px;min-height:14px"></div>
+      <div class="field-label">Color</div>
+      <div class="color-row" id="colorRow"></div>
+      <div class="btn-row">
+        <button class="btn btn-secondary" onclick="hideEdit()">Cancel</button>
+        <button class="btn btn-primary"   onclick="saveContact()">Save</button>
+      </div>
+      <div id="editActions" class="action-row" style="display:none">
+        <button class="btn btn-secondary" onclick="callContact()" style="display:flex;align-items:center;justify-content:center;gap:6px">
+          <i class="ti ti-phone" style="font-size:14px"></i> Call
+        </button>
+        <button class="btn btn-secondary" onclick="smsContact()" style="display:flex;align-items:center;justify-content:center;gap:6px">
+          <i class="ti ti-message-2" style="font-size:14px"></i> SMS
+        </button>
+        <button class="btn btn-danger" onclick="deleteContact()" style="display:flex;align-items:center;justify-content:center;gap:6px">
+          <i class="ti ti-trash" style="font-size:14px"></i>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<script>
+document.getElementById("baseStyle").textContent = BASE_CSS;
+StatusBar.init();
+
+let editingId   = null;
+let selectedColor = COLORS[0];
+let filtered    = [];
+
+async function init() {
+  await Contacts.load();
+  buildColorRow();
+  renderList(Contacts.all());
+}
+
+function renderList(list) {
+  filtered = list;
+  if (!list.length) {
+    document.getElementById("clist").innerHTML =
+      '<div class="empty"><i class="ti ti-address-book"></i><span style="font-size:11px">No contacts</span></div>';
+    return;
+  }
+  const sorted = [...list].sort((a,b) => a.name.localeCompare(b.name));
+  let html = "";
+  let lastLetter = "";
+  for (const c of sorted) {
+    const letter = c.name[0].toUpperCase();
+    if (letter !== lastLetter) {
+      html += `<div class="section-head">${esc(letter)}</div>`;
+      lastLetter = letter;
+    }
+    html += `<div class="contact-row" onclick="showEdit('${esc(c.id)}')">
+      <div class="av" style="width:38px;height:38px;font-size:14px;background:${c.color}">${Contacts.initials(c.name)}</div>
+      <div class="contact-body">
+        <div class="contact-name">${esc(c.name)}</div>
+        <div class="contact-num">${formatDisplay(c.number)}</div>
+      </div>
+      <i class="ti ti-chevron-right" style="color:var(--muted);font-size:14px"></i>
+    </div>`;
+  }
+  document.getElementById("clist").innerHTML = html;
+}
+
+function filterList(q) {
+  const f = q.toLowerCase();
+  renderList(Contacts.all().filter(c =>
+    c.name.toLowerCase().includes(f) || c.number.includes(f)));
+}
+
+function buildColorRow() {
+  document.getElementById("colorRow").innerHTML = COLORS.map(col =>
+    `<div class="color-swatch${col===selectedColor?" selected":""}"
+      style="background:${col}" onclick="selectColor('${col}')"></div>`
+  ).join("");
+}
+
+function selectColor(col) {
+  selectedColor = col;
+  buildColorRow();
+  updateEditAv();
+}
+
+function updateEditAv() {
+  const name = document.getElementById("editName").value.trim();
+  const av   = document.getElementById("editAv");
+  av.textContent      = name ? Contacts.initials(name) : "?";
+  av.style.background = selectedColor;
+}
+
+function updateEditHint() {
+  const raw  = document.getElementById("editNum").value.trim();
+  const hint = document.getElementById("editHint");
+  if (raw.length >= 3) {
+    hint.textContent = "→ " + normalizeNumber(raw);
+  } else {
+    hint.textContent = "";
+  }
+}
+
+function showAdd() {
+  editingId = null;
+  selectedColor = COLORS[Contacts.all().length % COLORS.length];
+  document.getElementById("editTitle").textContent = "New contact";
+  document.getElementById("editName").value = "";
+  document.getElementById("editNum").value  = "";
+  document.getElementById("editHint").textContent = "";
+  document.getElementById("editActions").style.display = "none";
+  buildColorRow(); updateEditAv();
+  document.getElementById("editOverlay").classList.remove("hidden");
+}
+
+function showEdit(id) {
+  const c = Contacts.get(id);
+  if (!c) return;
+  editingId     = id;
+  selectedColor = c.color;
+  document.getElementById("editTitle").textContent = "Edit contact";
+  document.getElementById("editName").value = c.name;
+  document.getElementById("editNum").value  = c.number;
+  document.getElementById("editHint").textContent = "→ " + c.number;
+  document.getElementById("editActions").style.display = "flex";
+  buildColorRow(); updateEditAv();
+  document.getElementById("editOverlay").classList.remove("hidden");
+}
+
+function hideEdit() { document.getElementById("editOverlay").classList.add("hidden"); }
+function overlayBg(e) { if (e.target.id==="editOverlay") hideEdit(); }
+
+async function saveContact() {
+  const name = document.getElementById("editName").value.trim();
+  const raw  = document.getElementById("editNum").value.trim();
+  if (!name) { toast("Name required"); return; }
+  if (!raw)  { toast("Number required"); return; }
+  if (editingId) {
+    const c = await Contacts.update(editingId, name, raw);
+    c.color = selectedColor;
+    await Contacts.save();
+  } else {
+    const c = await Contacts.add(name, raw);
+    c.color = selectedColor;
+    await Contacts.save();
+  }
+  hideEdit();
+  renderList(Contacts.all());
+  toast(editingId ? "Contact updated" : "Contact saved");
+  editingId = null;
+}
+
+async function deleteContact() {
+  if (!editingId) return;
+  await Contacts.remove(editingId);
+  hideEdit();
+  renderList(Contacts.all());
+  toast("Contact deleted");
+}
+
+function callContact() {
+  const c = Contacts.get(editingId);
+  if (c) window.location.href = "phone.html?calling=" + encodeURIComponent(c.number);
+}
+
+function smsContact() {
+  const c = Contacts.get(editingId);
+  if (c) window.location.href = "sms.html";
+  // TODO: open thread directly by passing number param to sms.html
+}
+
+function esc(s) { const d=document.createElement("div"); d.textContent=String(s||""); return d.innerHTML; }
+
+init();
+</script>
+</body>
+</html>

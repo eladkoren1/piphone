@@ -5,407 +5,121 @@
 <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
 <title>piphone</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="/js/common.js"></script>
+<style id="baseStyle"></style>
 <style>
-*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
-:root{
-  --bg:#0f0f12;--panel:#17171c;--border-c:#25252e;
-  --bubble-out:#1d4ed8;--bubble-in:#22222a;
-  --txt:#eeeef2;--muted:#7070a0;--green:#22c55e;--red:#ef4444;
-  --input-bg:#1c1c24;--send:#1d4ed8;
-}
-html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);
-  font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-  font-size:13px;color:var(--txt)}
-.screen{width:100%;height:100vh;display:flex;flex-direction:column;overflow:hidden}
-
-/* status bar */
-.sbar{height:20px;background:var(--panel);display:flex;align-items:center;
-  justify-content:space-between;padding:0 8px;font-size:10px;color:var(--muted);
-  flex-shrink:0;border-bottom:0.5px solid var(--border-c)}
-.sig{display:flex;align-items:flex-end;gap:2px}
-.sig span{width:3px;border-radius:1px}
-.sig span.on{background:var(--green)}
-.sig span.off{background:var(--muted)}
-.demo-badge{background:#7c3aed22;color:#a78bfa;font-size:9px;
-  padding:1px 4px;border-radius:3px;border:0.5px solid #7c3aed55}
-
-/* views */
-.view{flex:1;display:flex;flex-direction:column;overflow:hidden}
-.hidden{display:none!important}
-
-/* top bar */
-.topbar{height:44px;background:var(--panel);display:flex;align-items:center;
-  padding:0 8px;gap:8px;border-bottom:0.5px solid var(--border-c);flex-shrink:0}
-.topbar-title{font-size:15px;font-weight:500;flex:1}
-.ibtn{width:32px;height:32px;border-radius:8px;border:0.5px solid var(--border-c);
-  background:transparent;color:var(--muted);display:flex;align-items:center;
-  justify-content:center;cursor:pointer;font-size:17px}
-.ibtn:active{background:var(--border-c);color:var(--txt)}
-
-/* thread list */
-.tlist{flex:1;overflow-y:auto;overflow-x:hidden}
-.tlist::-webkit-scrollbar{width:3px}
-.tlist::-webkit-scrollbar-thumb{background:var(--border-c)}
-.thread{display:flex;align-items:center;gap:9px;padding:9px 10px;
-  border-bottom:0.5px solid var(--border-c);cursor:pointer}
-.thread:active{background:var(--panel)}
-.av{width:36px;height:36px;border-radius:50%;display:flex;align-items:center;
-  justify-content:center;font-size:13px;font-weight:500;color:#fff;flex-shrink:0}
-.tbody{flex:1;min-width:0}
-.trow{display:flex;justify-content:space-between;align-items:center}
-.tname{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;
-  text-overflow:ellipsis;max-width:160px}
-.ttime{font-size:10px;color:var(--muted);flex-shrink:0}
-.tprev{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;
-  text-overflow:ellipsis;margin-top:1px}
-.udot{width:7px;height:7px;border-radius:50%;background:var(--bubble-out);flex-shrink:0}
-.empty-list{flex:1;display:flex;flex-direction:column;align-items:center;
-  justify-content:center;gap:8px;color:var(--muted)}
-.empty-list i{font-size:36px;opacity:0.3}
-
-/* chat view */
-.chat-top{height:44px;background:var(--panel);flex-shrink:0;display:flex;
-  align-items:center;gap:8px;padding:0 8px;border-bottom:0.5px solid var(--border-c)}
-.back-btn{width:28px;height:28px;border-radius:7px;border:none;background:transparent;
-  color:var(--muted);font-size:18px;display:flex;align-items:center;
-  justify-content:center;cursor:pointer}
-.back-btn:active{color:var(--txt)}
-.cinfo{flex:1;min-width:0}
-.cname{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-.csub{font-size:10px;color:var(--green)}
-.msgs{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:5px}
-.msgs::-webkit-scrollbar{width:3px}
-.msgs::-webkit-scrollbar-thumb{background:var(--border-c)}
-.datesep{text-align:center;font-size:10px;color:var(--muted);margin:4px 0}
-.bwrap{display:flex;flex-direction:column}
-.bwrap.out{align-items:flex-end}
-.bwrap.in{align-items:flex-start}
-.bub{max-width:76%;padding:6px 10px;font-size:12.5px;line-height:1.4;word-break:break-word}
-.bub.out{background:var(--bubble-out);color:#fff;border-radius:12px 12px 3px 12px}
-.bub.in{background:var(--bubble-in);color:var(--txt);border-radius:12px 12px 12px 3px}
-.bmeta{font-size:10px;color:var(--muted);margin-top:2px}
-.bmeta.out{text-align:right}
-.tick{color:#93c5fd}
-.tick.sent{color:#7070a0}
-
-/* compose */
-.compose{padding:6px 8px;border-top:0.5px solid var(--border-c);display:flex;
-  gap:6px;align-items:flex-end;flex-shrink:0;background:var(--panel)}
-.ci{flex:1;background:var(--input-bg);border:0.5px solid var(--border-c);
-  border-radius:16px;color:var(--txt);font-size:12px;padding:7px 11px;
-  resize:none;outline:none;min-height:34px;max-height:80px;
-  font-family:inherit;line-height:1.4}
-.ci::placeholder{color:var(--muted)}
-.ci:focus{border-color:#1d4ed855}
-.sbtn{width:34px;height:34px;border-radius:50%;background:var(--send);border:none;
-  color:#fff;display:flex;align-items:center;justify-content:center;
-  cursor:pointer;font-size:15px;flex-shrink:0}
-.sbtn:active{opacity:0.8}
-
-/* new message sheet */
-.overlay{position:absolute;inset:0;background:rgba(0,0,0,0.6);
-  display:flex;align-items:flex-end;z-index:20}
-.sheet{width:100%;background:var(--panel);border-radius:12px 12px 0 0;
-  padding:14px 12px 20px;border-top:0.5px solid var(--border-c)}
-.sheet h3{font-size:13px;font-weight:500;margin-bottom:10px;color:var(--txt)}
-.ni{width:100%;background:var(--input-bg);border:0.5px solid var(--border-c);
-  border-radius:8px;color:var(--txt);font-size:12px;padding:8px 10px;
-  outline:none;margin-bottom:8px;font-family:inherit}
-.ni::placeholder{color:var(--muted)}
-.ni:focus{border-color:#1d4ed855}
-.sbtns{display:flex;gap:8px}
-.sbtns button{flex:1;padding:9px;border-radius:8px;font-size:12px;
-  cursor:pointer;border:none;font-family:inherit}
-.btn-cancel{background:var(--border-c);color:var(--muted)}
-.btn-ok{background:var(--bubble-out);color:#fff}
-
-/* toast */
-.toast{position:absolute;bottom:60px;left:50%;transform:translateX(-50%);
-  background:#1e293b;color:var(--txt);font-size:11px;padding:6px 12px;
-  border-radius:20px;border:0.5px solid var(--border-c);
-  opacity:0;transition:opacity 0.2s;pointer-events:none;white-space:nowrap;z-index:30}
-.toast.show{opacity:1}
-
-/* loading spinner */
-.spinner{width:16px;height:16px;border:2px solid var(--border-c);
-  border-top-color:var(--muted);border-radius:50%;animation:spin 0.6s linear infinite;display:inline-block}
-@keyframes spin{to{transform:rotate(360deg)}}
+.home-body{flex:1;display:flex;flex-direction:column;overflow:hidden}
+.time-block{display:flex;flex-direction:column;align-items:center;
+  justify-content:center;padding:28px 0 20px;flex-shrink:0}
+.big-time{font-size:52px;font-weight:300;color:var(--txt);letter-spacing:-1px;line-height:1}
+.big-date{font-size:13px;color:var(--muted);margin-top:6px}
+.apps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;padding:16px 20px;flex-shrink:0}
+.app-icon{display:flex;flex-direction:column;align-items:center;gap:8px;cursor:pointer}
+.app-icon:active .icon-wrap{transform:scale(0.93)}
+.icon-wrap{width:56px;height:56px;border-radius:16px;display:flex;align-items:center;
+  justify-content:center;font-size:26px;color:#fff;transition:transform 0.1s;position:relative}
+.app-label{font-size:11px;color:var(--muted);text-align:center}
+.badge{position:absolute;top:-4px;right:-4px;min-width:16px;height:16px;border-radius:8px;
+  background:var(--red);color:#fff;font-size:9px;font-weight:500;
+  display:none;align-items:center;justify-content:center;padding:0 4px}
+.badge.show{display:flex}
+.status-strip{margin:0 16px;padding:10px 14px;background:var(--panel);border-radius:12px;
+  border:0.5px solid var(--border-c);display:flex;align-items:center;justify-content:space-between}
+.strip-item{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted)}
+.strip-dot{width:6px;height:6px;border-radius:50%;background:var(--green)}
 </style>
 </head>
 <body>
-<div class="screen" id="screen">
-
-  <!-- status bar -->
+<div class="screen">
   <div class="sbar">
-    <span id="sbCarrier">019 · LTE</span>
-    <div class="sig" id="sigBars">
-      <span class="off" style="height:4px"></span>
-      <span class="off" style="height:6px"></span>
-      <span class="off" style="height:8px"></span>
-      <span class="off" style="height:10px"></span>
-      <span class="off" style="height:12px"></span>
+    <span id="sbCarrier">--- · ---</span>
+    <div class="sig">
+      <span class="sig-bar" style="height:4px"></span>
+      <span class="sig-bar" style="height:6px"></span>
+      <span class="sig-bar" style="height:8px"></span>
+      <span class="sig-bar" style="height:10px"></span>
+      <span class="sig-bar" style="height:12px"></span>
     </div>
     <span id="sbClock">--:--</span>
   </div>
-
-  <!-- thread list view -->
-  <div class="view" id="viewList">
-    <div class="topbar">
-      <span class="topbar-title">Messages <span class="demo-badge" id="demoBadge" style="display:none">DEMO</span></span>
-      <button class="ibtn" onclick="showNew()" aria-label="New message"><i class="ti ti-edit"></i></button>
+  <div class="home-body">
+    <div class="time-block">
+      <div class="big-time" id="bigTime">--:--</div>
+      <div class="big-date" id="bigDate">---</div>
     </div>
-    <div class="tlist" id="threadList">
-      <div class="empty-list"><div class="spinner"></div></div>
+    <div class="status-strip">
+      <div class="strip-item"><div class="strip-dot"></div><span id="simStatus">Registered</span></div>
+      <div class="strip-item"><i class="ti ti-wifi" style="font-size:14px"></i><span id="ratStatus">---</span></div>
+      <div class="strip-item"><i class="ti ti-cpu" style="font-size:14px"></i><span>Pi 5</span></div>
     </div>
-  </div>
-
-  <!-- chat view -->
-  <div class="view hidden" id="viewChat">
-    <div class="chat-top">
-      <button class="back-btn" onclick="goBack()" aria-label="Back"><i class="ti ti-arrow-left"></i></button>
-      <div id="chatAv" class="av" style="width:30px;height:30px;font-size:12px;flex-shrink:0"></div>
-      <div class="cinfo">
-        <div id="chatName" class="cname"></div>
-        <div class="csub" id="chatSub">LTE · registered</div>
+    <div class="apps-grid">
+      <div class="app-icon" onclick="go('phone.html')">
+        <div class="icon-wrap" style="background:#16a34a">
+          <i class="ti ti-phone"></i>
+          <div class="badge" id="badgeCall"></div>
+        </div>
+        <span class="app-label">Phone</span>
       </div>
-      <button class="ibtn" onclick="dialActive()" aria-label="Call"><i class="ti ti-phone"></i></button>
-    </div>
-    <div class="msgs" id="msgs"></div>
-    <div class="compose">
-      <textarea class="ci" id="ci" placeholder="Message" rows="1"
-        onkeydown="handleKey(event)" oninput="autoH(this)"></textarea>
-      <button class="sbtn" onclick="sendMsg()" aria-label="Send"><i class="ti ti-send"></i></button>
-    </div>
-  </div>
-
-  <!-- new message overlay -->
-  <div class="overlay hidden" id="newOverlay" onclick="overlayClick(event)">
-    <div class="sheet" id="newSheet">
-      <h3>New message</h3>
-      <input class="ni" id="newName" placeholder="Name" autocomplete="off" />
-      <input class="ni" id="newNum"  placeholder="+972..." type="tel" autocomplete="off" />
-      <div class="sbtns">
-        <button class="btn-cancel" onclick="hideNew()">Cancel</button>
-        <button class="btn-ok"     onclick="createConvo()">Start</button>
+      <div class="app-icon" onclick="go('sms.html')">
+        <div class="icon-wrap" style="background:#1d4ed8">
+          <i class="ti ti-message-2"></i>
+          <div class="badge" id="badgeSms"></div>
+        </div>
+        <span class="app-label">Messages</span>
+      </div>
+      <div class="app-icon" onclick="go('contacts.html')">
+        <div class="icon-wrap" style="background:#7c3aed">
+          <i class="ti ti-address-book"></i>
+        </div>
+        <span class="app-label">Contacts</span>
+      </div>
+      <div class="app-icon" onclick="toast('Settings coming soon')">
+        <div class="icon-wrap" style="background:#475569">
+          <i class="ti ti-settings"></i>
+        </div>
+        <span class="app-label">Settings</span>
+      </div>
+      <div class="app-icon" onclick="toast('Data coming soon')">
+        <div class="icon-wrap" style="background:#0891b2">
+          <i class="ti ti-wifi"></i>
+        </div>
+        <span class="app-label">Data</span>
+      </div>
+      <div class="app-icon" onclick="toast('USSD coming soon')">
+        <div class="icon-wrap" style="background:#b45309">
+          <i class="ti ti-hash"></i>
+        </div>
+        <span class="app-label">USSD</span>
       </div>
     </div>
   </div>
-
-  <!-- toast -->
   <div class="toast" id="toast"></div>
-
 </div>
-
 <script>
-const API = "";          // same origin — Flask serves this file
-let threads = [];
-let active  = null;      // current open thread object
-
-// ── clock ──────────────────────────────────────────────────────────────────
-function tick(){
-  const n = new Date();
-  document.getElementById("sbClock").textContent =
+document.getElementById("baseStyle").textContent = BASE_CSS;
+function go(page){window.location.href=page}
+function bigTick(){
+  const n=new Date();
+  document.getElementById("bigTime").textContent=
     String(n.getHours()).padStart(2,"0")+":"+String(n.getMinutes()).padStart(2,"0");
+  document.getElementById("bigDate").textContent=
+    n.toLocaleDateString("en-IL",{weekday:"long",month:"long",day:"numeric"});
 }
-tick(); setInterval(tick, 10000);
-
-// ── helpers ────────────────────────────────────────────────────────────────
-function ini(n){ return n.split(" ").map(w=>w[0]).join("").slice(0,2).toUpperCase() }
-function toast(msg, ms=2000){
-  const el=document.getElementById("toast");
-  el.textContent=msg; el.classList.add("show");
-  clearTimeout(el._t); el._t=setTimeout(()=>el.classList.remove("show"),ms);
-}
-
-// ── modem status ───────────────────────────────────────────────────────────
-async function fetchStatus(){
+bigTick();setInterval(bigTick,10000);
+StatusBar.init();
+async function checkUnread(){
   try{
-    const r = await fetch(API+"/api/modem/status");
-    const s = await r.json();
-    document.getElementById("sbCarrier").textContent =
-      (s.operator||"---")+" · "+(s.rat||"?");
-    const bars = document.querySelectorAll("#sigBars span");
-    const n = Math.min(s.signal_bars||0, 5);
-    bars.forEach((b,i)=>{ b.className = i<n?"on":"off"; });
-    if(s.dummy) document.getElementById("demoBadge").style.display="";
-  }catch(e){ console.warn("status fetch failed",e) }
+    const ts=await(await fetch("/api/sms/inbox")).json();
+    const total=ts.reduce((s,t)=>s+(t.unread||0),0);
+    const b=document.getElementById("badgeSms");
+    b.textContent=total>9?"9+":total;
+    b.classList.toggle("show",total>0);
+  }catch(e){}
 }
-fetchStatus(); setInterval(fetchStatus, 15000);
-
-// ── thread list ────────────────────────────────────────────────────────────
-async function fetchInbox(){
-  try{
-    const r = await fetch(API+"/api/sms/inbox");
-    threads = await r.json();
-    renderList();
-  }catch(e){
-    document.getElementById("threadList").innerHTML=
-      '<div class="empty-list"><i class="ti ti-wifi-off"></i><span style="font-size:11px">Can\'t reach backend</span></div>';
-  }
-}
-
-function renderList(){
-  if(!threads.length){
-    document.getElementById("threadList").innerHTML=
-      '<div class="empty-list"><i class="ti ti-message-2"></i><span style="font-size:11px">No messages</span></div>';
-    return;
-  }
-  document.getElementById("threadList").innerHTML = threads.map(t=>{
-    const last = t.messages.at(-1);
-    return `<div class="thread" onclick="openThread('${t.id}')" role="button" tabindex="0">
-      <div class="av" style="background:${t.color}">${ini(t.name)}</div>
-      <div class="tbody">
-        <div class="trow">
-          <span class="tname">${esc(t.name)}</span>
-          <span class="ttime">${last?esc(last.ts):""}</span>
-        </div>
-        <div class="tprev">${last?esc(last.text):""}</div>
-      </div>
-      ${t.unread?'<div class="udot"></div>':""}
-    </div>`;
-  }).join("");
-}
-
-// ── open thread ────────────────────────────────────────────────────────────
-function openThread(id){
-  active = threads.find(t=>t.id===id);
-  if(!active) return;
-  active.unread = 0;
-  const av = document.getElementById("chatAv");
-  av.textContent = ini(active.name);
-  av.style.background = active.color;
-  document.getElementById("chatName").textContent = active.name+" · "+active.number;
-  document.getElementById("viewList").classList.add("hidden");
-  document.getElementById("viewChat").classList.remove("hidden");
-  renderMsgs();
-  renderList();
-  scrollMsgs();
-}
-
-function renderMsgs(){
-  if(!active) return;
-  document.getElementById("msgs").innerHTML =
-    '<div class="datesep">Today</div>' +
-    active.messages.map(m=>`
-      <div class="bwrap ${m.dir}">
-        <div class="bub ${m.dir}">${esc(m.text)}</div>
-        <div class="bmeta ${m.dir}">${esc(m.ts)}
-          ${m.dir==="out"
-            ?`<span class="tick ${m.status==="read"?"":"sent"}"> ✓✓</span>`
-            :""}
-        </div>
-      </div>`).join("");
-}
-
-function scrollMsgs(){ setTimeout(()=>{ const m=document.getElementById("msgs"); m.scrollTop=m.scrollHeight; },30) }
-
-function goBack(){
-  document.getElementById("viewChat").classList.add("hidden");
-  document.getElementById("viewList").classList.remove("hidden");
-  active = null;
-}
-
-// ── send SMS ───────────────────────────────────────────────────────────────
-async function sendMsg(){
-  const el  = document.getElementById("ci");
-  const txt = el.value.trim();
-  if(!txt || !active) return;
-  el.value=""; el.style.height="";
-
-  const now = new Date().toLocaleTimeString("en-IL",{hour:"2-digit",minute:"2-digit"});
-  const tmp = { id: "tmp-"+Date.now(), dir:"out", text:txt, ts:now, status:"sent" };
-  active.messages.push(tmp);
-  renderMsgs(); scrollMsgs();
-
-  try{
-    const r = await fetch(API+"/api/sms/send",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({number: active.number, text: txt})
-    });
-    const d = await r.json();
-    if(d.ok){
-      tmp.id = d.id;
-      tmp.status = "delivered";
-    } else {
-      tmp.status = "failed";
-      toast("Send failed");
-    }
-  }catch(e){
-    tmp.status = "failed";
-    toast("No connection to backend");
-  }
-  renderMsgs(); scrollMsgs();
-}
-
-function handleKey(e){ if(e.key==="Enter"&&!e.shiftKey){ e.preventDefault(); sendMsg(); } }
-function autoH(el){ el.style.height="auto"; el.style.height=Math.min(el.scrollHeight,80)+"px"; }
-
-// ── new conversation ────────────────────────────────────────────────────────
-function showNew(){ document.getElementById("newOverlay").classList.remove("hidden"); }
-function hideNew(){ document.getElementById("newOverlay").classList.add("hidden"); }
-function overlayClick(e){ if(e.target.id==="newOverlay") hideNew(); }
-
-function createConvo(){
-  const name = document.getElementById("newName").value.trim();
-  const num  = document.getElementById("newNum").value.trim();
-  if(!name || !num){ toast("Name and number required"); return; }
-  const id = "local-"+Date.now();
-  const t = { id, thread_id:num, name, number:num,
-               color:"#1d4ed8", messages:[], unread:0 };
-  threads.unshift(t);
-  document.getElementById("newName").value="";
-  document.getElementById("newNum").value="";
-  hideNew();
-  renderList();
-  openThread(id);
-}
-
-// ── call ────────────────────────────────────────────────────────────────────
-async function dialActive(){
-  if(!active) return;
-  try{
-    await fetch(API+"/api/call/dial",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body: JSON.stringify({number: active.number})
-    });
-    toast("Calling "+active.name+"…", 3000);
-  }catch(e){ toast("Call failed"); }
-}
-
-// ── SSE — incoming events ───────────────────────────────────────────────────
-function connectSSE(){
-  const es = new EventSource(API+"/api/events");
-  es.onmessage = async e => {
-    try{
-      const d = JSON.parse(e.data);
-      if(d.type==="sms"){
-        toast("SMS from "+(d.name||d.from)+": "+d.preview, 4000);
-        await fetchInbox();
-        if(active && (active.number===d.from || active.id===d.from)){
-          active = threads.find(t=>t.number===d.from || t.id===d.from) || active;
-          renderMsgs(); scrollMsgs();
-        }
-      } else if(d.type==="ring"){
-        toast("Incoming call: "+(d.from||"unknown"), 5000);
-      } else if(d.type==="delivered"){
-        if(active){
-          const m = active.messages.find(x=>x.id===d.id);
-          if(m){ m.status="delivered"; renderMsgs(); }
-        }
-      }
-    }catch(_){}
-  };
-  es.onerror = () => setTimeout(connectSSE, 5000);
-}
-
-// ── XSS guard ───────────────────────────────────────────────────────────────
-function esc(s){ const d=document.createElement("div"); d.textContent=String(s||""); return d.innerHTML; }
-
-// ── boot ────────────────────────────────────────────────────────────────────
-fetchInbox();
-connectSSE();
+checkUnread();setInterval(checkUnread,15000);
+SSE.on("sms",d=>{checkUnread();toast("SMS: "+(d.name||d.from),3000)});
+SSE.on("ring",d=>{toast("Incoming: "+(d.from||"unknown"),5000)});
+SSE.connect();
 </script>
 </body>
 </html>

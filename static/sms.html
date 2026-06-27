@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>Messages</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3.19.0/dist/tabler-icons.min.css">
+<script src="/js/common.js"></script>
+<style id="baseStyle"></style>
+<style>
+.tlist{flex:1;overflow-y:auto}
+.tlist::-webkit-scrollbar{width:3px}
+.tlist::-webkit-scrollbar-thumb{background:var(--border-c)}
+.thread{display:flex;align-items:center;gap:9px;padding:9px 10px;
+  border-bottom:0.5px solid var(--border-c);cursor:pointer}
+.thread:active{background:var(--panel)}
+.tbody{flex:1;min-width:0}
+.trow{display:flex;justify-content:space-between;align-items:center}
+.tname{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:165px}
+.ttime{font-size:10px;color:var(--muted);flex-shrink:0}
+.tprev{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:1px}
+.udot{width:7px;height:7px;border-radius:50%;background:var(--accent);flex-shrink:0}
+.empty-list{flex:1;display:flex;flex-direction:column;align-items:center;
+  justify-content:center;gap:8px;color:var(--muted)}
+.empty-list i{font-size:36px;opacity:0.3}
+.msgs{flex:1;overflow-y:auto;padding:8px;display:flex;flex-direction:column;gap:5px}
+.msgs::-webkit-scrollbar{width:3px}
+.msgs::-webkit-scrollbar-thumb{background:var(--border-c)}
+.datesep{text-align:center;font-size:10px;color:var(--muted);margin:4px 0}
+.bwrap{display:flex;flex-direction:column}
+.bwrap.out{align-items:flex-end}
+.bwrap.in{align-items:flex-start}
+.bub{max-width:76%;padding:6px 10px;font-size:12.5px;line-height:1.4;word-break:break-word}
+.bub.out{background:var(--accent);color:#fff;border-radius:12px 12px 3px 12px}
+.bub.in{background:var(--bubble-in);color:var(--txt);border-radius:12px 12px 12px 3px}
+.bmeta{font-size:10px;color:var(--muted);margin-top:2px}
+.bmeta.out{text-align:right}
+.tick{color:#93c5fd}
+.tick.sent{color:#7070a0}
+.compose{padding:6px 8px;border-top:0.5px solid var(--border-c);
+  display:flex;gap:6px;align-items:flex-end;flex-shrink:0;background:var(--panel)}
+.ci{flex:1;background:var(--input-bg);border:0.5px solid var(--border-c);
+  border-radius:16px;color:var(--txt);font-size:12px;padding:7px 11px;
+  resize:none;outline:none;min-height:34px;max-height:80px;
+  font-family:inherit;line-height:1.4}
+.ci::placeholder{color:var(--muted)}
+.sbtn{width:34px;height:34px;border-radius:50%;background:var(--accent);
+  border:none;color:#fff;display:flex;align-items:center;
+  justify-content:center;cursor:pointer;font-size:15px;flex-shrink:0}
+.sbtn:active{opacity:0.8}
+.overlay{position:absolute;inset:0;background:rgba(0,0,0,0.65);
+  display:flex;align-items:flex-end;z-index:20}
+.sheet{width:100%;background:var(--panel);border-radius:12px 12px 0 0;
+  padding:14px 12px 20px;border-top:0.5px solid var(--border-c)}
+.sheet h3{font-size:13px;font-weight:500;margin-bottom:10px}
+.sbtns{display:flex;gap:8px;margin-top:10px}
+.sbtns .btn{flex:1}
+.back-btn{width:28px;height:28px;border-radius:7px;border:none;
+  background:transparent;color:var(--muted);font-size:18px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer}
+.chat-top{height:44px;background:var(--panel);flex-shrink:0;display:flex;
+  align-items:center;gap:8px;padding:0 8px;border-bottom:0.5px solid var(--border-c)}
+.cinfo{flex:1;min-width:0}
+.cname{font-size:13px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.csub{font-size:10px;color:var(--green)}
+</style>
+</head>
+<body>
+<div class="screen">
+  <div class="sbar">
+    <span id="sbCarrier">--- · ---</span>
+    <div class="sig">
+      <span class="sig-bar" style="height:4px"></span>
+      <span class="sig-bar" style="height:6px"></span>
+      <span class="sig-bar" style="height:8px"></span>
+      <span class="sig-bar" style="height:10px"></span>
+      <span class="sig-bar" style="height:12px"></span>
+    </div>
+    <span id="sbClock">--:--</span>
+  </div>
+
+  <!-- thread list -->
+  <div class="view" id="viewList">
+    <div class="topbar">
+      <button class="ibtn" onclick="window.location.href='/'" aria-label="Home"><i class="ti ti-home"></i></button>
+      <span class="topbar-title">Messages</span>
+      <button class="ibtn" onclick="showNew()" aria-label="New message"><i class="ti ti-edit"></i></button>
+    </div>
+    <div class="tlist" id="threadList">
+      <div class="empty-list"><i class="ti ti-loader" style="animation:spin 1s linear infinite"></i></div>
+    </div>
+  </div>
+
+  <!-- chat view -->
+  <div class="view hidden" id="viewChat">
+    <div class="chat-top">
+      <button class="back-btn" onclick="goBack()" aria-label="Back"><i class="ti ti-arrow-left"></i></button>
+      <div id="chatAv" class="av" style="width:30px;height:30px;font-size:12px"></div>
+      <div class="cinfo">
+        <div id="chatName" class="cname"></div>
+        <div class="csub">registered</div>
+      </div>
+      <button class="ibtn" onclick="dialActive()" aria-label="Call"><i class="ti ti-phone"></i></button>
+    </div>
+    <div class="msgs" id="msgs"></div>
+    <div class="compose">
+      <textarea class="ci" id="ci" placeholder="Message" rows="1"
+        onkeydown="handleKey(event)" oninput="autoH(this)"></textarea>
+      <button class="sbtn" onclick="sendMsg()" aria-label="Send"><i class="ti ti-send"></i></button>
+    </div>
+  </div>
+
+  <!-- new message overlay -->
+  <div class="overlay hidden" id="newOverlay" onclick="overlayBg(event)">
+    <div class="sheet">
+      <h3>New message</h3>
+      <input id="newName" placeholder="Name (optional)" autocomplete="off" style="margin-bottom:8px" />
+      <input id="newNum"  placeholder="Number e.g. 054..." type="tel" autocomplete="off" />
+      <div class="sbtns">
+        <button class="btn btn-secondary" onclick="hideNew()">Cancel</button>
+        <button class="btn btn-primary"   onclick="createConvo()">Start</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+</div>
+
+<style>
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+
+<script>
+document.getElementById("baseStyle").textContent = BASE_CSS;
+StatusBar.init();
+
+let threads = [];
+let active  = null;
+
+async function init() {
+  await Contacts.load();
+  await fetchInbox();
+  SSE.on("sms", async d => {
+    await fetchInbox();
+    if (active && normalizeNumber(active.number) === normalizeNumber(d.from)) {
+      active = threads.find(t => normalizeNumber(t.number) === normalizeNumber(d.from)) || active;
+      renderMsgs(); scrollMsgs();
+    } else {
+      toast("SMS from " + Contacts.resolveName(d.from) + ": " + d.preview, 3500);
+    }
+  });
+  SSE.on("delivered", d => {
+    if (!active) return;
+    const m = active.messages.find(x => x.id === d.id);
+    if (m) { m.status = "delivered"; renderMsgs(); }
+  });
+  SSE.connect();
+}
+
+async function fetchInbox() {
+  try {
+    const r = await fetch("/api/sms/inbox");
+    threads  = await r.json();
+    renderList();
+  } catch(e) {
+    document.getElementById("threadList").innerHTML =
+      '<div class="empty-list"><i class="ti ti-wifi-off"></i><span style="font-size:11px">Backend unreachable</span></div>';
+  }
+}
+
+function renderList() {
+  if (!threads.length) {
+    document.getElementById("threadList").innerHTML =
+      '<div class="empty-list"><i class="ti ti-message-2"></i><span style="font-size:11px">No messages</span></div>';
+    return;
+  }
+  document.getElementById("threadList").innerHTML = threads.map(t => {
+    const name = Contacts.resolveName(t.number) || t.name;
+    const color = Contacts.resolveColor(t.number) || t.color;
+    const last  = t.messages.at(-1);
+    return `<div class="thread" onclick="openThread('${esc(t.id)}')" role="button" tabindex="0">
+      <div class="av" style="width:36px;height:36px;font-size:13px;background:${color}">${Contacts.initials(name)}</div>
+      <div class="tbody">
+        <div class="trow">
+          <span class="tname">${esc(name)}</span>
+          <span class="ttime">${last ? esc(last.ts) : ""}</span>
+        </div>
+        <div class="tprev">${last ? esc(last.text) : ""}</div>
+      </div>
+      ${t.unread ? '<div class="udot"></div>' : ""}
+    </div>`;
+  }).join("");
+}
+
+function openThread(id) {
+  active = threads.find(t => t.id === id);
+  if (!active) return;
+  active.unread = 0;
+  const name  = Contacts.resolveName(active.number) || active.name;
+  const color = Contacts.resolveColor(active.number) || active.color;
+  const av    = document.getElementById("chatAv");
+  av.textContent  = Contacts.initials(name);
+  av.style.background = color;
+  document.getElementById("chatName").textContent = name + " · " + formatDisplay(active.number);
+  document.getElementById("viewList").classList.add("hidden");
+  document.getElementById("viewChat").classList.remove("hidden");
+  renderMsgs(); scrollMsgs(); renderList();
+}
+
+function renderMsgs() {
+  if (!active) return;
+  document.getElementById("msgs").innerHTML =
+    '<div class="datesep">Today</div>' +
+    active.messages.map(m => `
+      <div class="bwrap ${m.dir}">
+        <div class="bub ${m.dir}">${esc(m.text)}</div>
+        <div class="bmeta ${m.dir}">${esc(m.ts)}
+          ${m.dir==="out" ? `<span class="tick ${m.status==="read"?"":"sent"}"> ✓✓</span>` : ""}
+        </div>
+      </div>`).join("");
+}
+
+function scrollMsgs() {
+  setTimeout(() => { const m = document.getElementById("msgs"); m.scrollTop = m.scrollHeight; }, 30);
+}
+
+function goBack() {
+  document.getElementById("viewChat").classList.add("hidden");
+  document.getElementById("viewList").classList.remove("hidden");
+  active = null;
+}
+
+async function sendMsg() {
+  const el  = document.getElementById("ci");
+  const txt = el.value.trim();
+  if (!txt || !active) return;
+  el.value = ""; el.style.height = "";
+  const now = new Date().toLocaleTimeString("en-IL", {hour:"2-digit",minute:"2-digit"});
+  const tmp = { id: "tmp-" + Date.now(), dir:"out", text:txt, ts:now, status:"sent" };
+  active.messages.push(tmp);
+  renderMsgs(); scrollMsgs();
+  try {
+    const d = await (await fetch("/api/sms/send", {
+      method:"POST", headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ number: active.number, text: txt })
+    })).json();
+    tmp.id     = d.ok ? d.id : tmp.id;
+    tmp.status = d.ok ? "delivered" : "failed";
+    if (!d.ok) toast("Send failed: " + (d.error||""));
+  } catch(e) {
+    tmp.status = "failed"; toast("No connection");
+  }
+  renderMsgs(); scrollMsgs();
+}
+
+function handleKey(e) { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); } }
+function autoH(el) { el.style.height="auto"; el.style.height=Math.min(el.scrollHeight,80)+"px"; }
+
+function showNew()  { document.getElementById("newOverlay").classList.remove("hidden"); }
+function hideNew()  { document.getElementById("newOverlay").classList.add("hidden"); }
+function overlayBg(e) { if (e.target.id==="newOverlay") hideNew(); }
+
+function createConvo() {
+  const name = document.getElementById("newName").value.trim();
+  const raw  = document.getElementById("newNum").value.trim();
+  if (!raw) { toast("Number required"); return; }
+  const number = normalizeNumber(raw);
+  const id = "local-" + Date.now();
+  const resolvedName = name || Contacts.resolveName(number) || formatDisplay(number);
+  threads.unshift({ id, thread_id:number, name:resolvedName, number,
+                    color:"#1d4ed8", messages:[], unread:0 });
+  document.getElementById("newName").value = "";
+  document.getElementById("newNum").value  = "";
+  hideNew(); renderList(); openThread(id);
+}
+
+async function dialActive() {
+  if (!active) return;
+  try {
+    await fetch("/api/call/dial", { method:"POST",
+      headers:{"Content-Type":"application/json"},
+      body: JSON.stringify({ number: active.number }) });
+    window.location.href = "phone.html?calling=" + encodeURIComponent(active.number);
+  } catch(e) { toast("Call failed"); }
+}
+
+function esc(s) { const d=document.createElement("div"); d.textContent=String(s||""); return d.innerHTML; }
+
+init();
+</script>
+</body>
+</html>

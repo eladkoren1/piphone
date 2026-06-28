@@ -254,8 +254,7 @@ function callContact() {
 
 function smsContact() {
   const c = Contacts.get(editingId);
-  if (c) window.location.href = "sms.html";
-  // TODO: open thread directly by passing number param to sms.html
+  if (c) window.location.href = "sms.html?number=" + encodeURIComponent(c.number);
 }
 
 function esc(s) { const d=document.createElement("div"); d.textContent=String(s||""); return d.innerHTML; }

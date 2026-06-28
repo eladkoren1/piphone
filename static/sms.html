@@ -140,6 +140,26 @@ let active  = null;
 async function init() {
   await Contacts.load();
   await fetchInbox();
+
+  // if opened from contacts page with ?number=... auto-open that thread
+  const params = new URLSearchParams(window.location.search);
+  const targetNumber = params.get("number");
+  if (targetNumber) {
+    const norm = normalizeNumber(targetNumber);
+    // find existing thread or create a new one
+    let thread = threads.find(t => normalizeNumber(t.number) === norm);
+    if (!thread) {
+      const id = "local-" + Date.now();
+      const name = Contacts.resolveName(norm);
+      const color = Contacts.resolveColor(norm);
+      thread = { id, thread_id: norm, name, number: norm,
+                 color, messages: [], unread: 0 };
+      threads.unshift(thread);
+      renderList();
+    }
+    openThread(thread.id);
+  }
+
   SSE.on("sms", async d => {
     await fetchInbox();
     if (active && normalizeNumber(active.number) === normalizeNumber(d.from)) {

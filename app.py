@@ -159,5 +159,12 @@ def events():
                     headers={"Cache-Control": "no-cache",
                              "X-Accel-Buffering": "no"})
 
+@app.after_request
+def no_cache(r):
+    r.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"
+    r.headers["Pragma"] = "no-cache"
+    r.headers["Expires"] = "0"
+    return r
+
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=False, threaded=True)

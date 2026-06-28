@@ -161,6 +161,16 @@ class ModemDriver:
                 if raw:
                     buf += raw.decode(errors="replace")
 
+                # detect bare '>' prompt (no newline) — flush it immediately
+                if collecting and sms_phase == 1 and ">" in buf:
+                    buf = buf.replace(">", "")
+                    log.info("← '>'")
+                    resp_lines.append(">")
+                    log.info("→ <sms body + ctrl-z>")
+                    self._ser.write((sms_text_pending + "\x1a").encode())
+                    sms_phase = 2
+                    continue
+
                 # ── process complete lines ────────────────────────────────────
                 while "\n" in buf:
                     line, buf = buf.split("\n", 1)
@@ -172,14 +182,7 @@ class ModemDriver:
                     if collecting:
                         resp_lines.append(line)
 
-                        if sms_phase == 1 and line == ">":
-                            # got the prompt — send text + ctrl-z
-                            log.info("→ <sms body + ctrl-z>")
-                            self._ser.write(
-                                (sms_text_pending + "\x1a").encode())
-                            sms_phase = 2   # now waiting for OK/+CMGS
-
-                        elif sms_phase == 1 and _is_final(line):
+                        if sms_phase == 1 and _is_final(line):
                             # error before prompt
                             resp_q.put(list(resp_lines))
                             collecting = False

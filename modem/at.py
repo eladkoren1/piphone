@@ -93,21 +93,66 @@ class ModemDriver:
           IDLE      — read for URCs, check cmd_queue
           COLLECT   — a command was sent, collect response lines until final
         """
-        buf         = ""
-        collecting  = False
-        resp_q      = None
-        resp_lines  = []
+        buf              = ""
+        collecting       = False
+        resp_q           = None
+        resp_lines       = []
+        sms_phase        = 0
+        sms_text_pending = None
 
         while self._running:
             try:
                 # ── check for a pending command (non-blocking) ────────────────
                 if not collecting:
                     try:
-                        cmd_str, resp_q = self._cmd_queue.get_nowait()
-                        log.info("→ %r", cmd_str)
-                        self._ser.write((cmd_str + "\r\n").encode())
-                        resp_lines = []
-                        collecting = True
+                        item = self._cmd_queue.get_nowait()
+                        cmd_str = item[0]
+
+                        if cmd_str is None:
+                            # cancel token
+                            continue
+
+                        elif cmd_str == "SMS":
+                            # SMS 4-tuple: ("SMS", number, text, resp_q)
+                            _, sms_number, sms_text, resp_q = item
+                            log.info("→ SMS to %s", sms_number)
+                            # step 1: send AT+CMGS
+                            self._ser.write(
+                                f'AT+CMGS="{sms_number}"\r\n'.encode())
+                            resp_lines = []
+                            sms_phase  = 1   # waiting for >
+                            sms_text_pending = sms_text
+                            collecting = True
+
+                        else:
+                            # normal command: (cmd_str, resp_q)
+                            cmd_str, resp_q = item
+                            sms_phase = 0
+                            sms_text_pending = None
+                            log.info("→ %r", cmd_str)
+                            self._ser.write((cmd_str + "\r\n").encode())
+                            resp_lines = []
+                            collecting = True
+
+                    except queue.Empty:
+                        pass
+                else:
+                    # check if a cancel token arrived for the in-flight cmd
+                    try:
+                        token, _ = self._cmd_queue.get_nowait()
+                        if token is None:
+                            log.warning("Modem loop: cancelling in-flight command, flushing")
+                            # send ESC to abort any modem prompt (e.g. >)
+                            self._ser.write(b"\x1b")
+                            time.sleep(0.1)
+                            self._ser.reset_input_buffer()
+                            collecting  = False
+                            resp_q      = None
+                            resp_lines  = []
+                            buf         = ""
+                        else:
+                            # put it back — it's a real command
+                            self._cmd_queue.put((token, _))
                     except queue.Empty:
                         pass
 
@@ -126,8 +171,32 @@ class ModemDriver:
 
                     if collecting:
                         resp_lines.append(line)
-                        if _is_final(line) or line == ">":
-                            # response complete — hand back to caller
+
+                        if sms_phase == 1 and line == ">":
+                            # got the prompt — send text + ctrl-z
+                            log.info("→ <sms body + ctrl-z>")
+                            self._ser.write(
+                                (sms_text_pending + "\x1a").encode())
+                            sms_phase = 2   # now waiting for OK/+CMGS
+
+                        elif sms_phase == 1 and _is_final(line):
+                            # error before prompt
+                            resp_q.put(list(resp_lines))
+                            collecting = False
+                            resp_q = None
+                            resp_lines = []
+                            sms_phase = 0
+
+                        elif sms_phase == 2 and _is_final(line):
+                            # SMS fully sent
+                            resp_q.put(list(resp_lines))
+                            collecting = False
+                            resp_q = None
+                            resp_lines = []
+                            sms_phase = 0
+
+                        elif sms_phase == 0 and (_is_final(line) or line == ">"):
+                            # normal command complete
                             resp_q.put(list(resp_lines))
                             collecting = False
                             resp_q     = None
@@ -171,6 +240,9 @@ class ModemDriver:
             return resp_q.get(timeout=timeout)
         except queue.Empty:
             log.warning("Timeout: %s", command)
+            # Post a cancel token so modem_loop stops collecting
+            # and flushes whatever state the modem is in
+            self._cmd_queue.put((None, None))
             return []
 
     def _ok(self, lines):
@@ -257,28 +329,29 @@ class ModemDriver:
             return copy.deepcopy(self._inbox)
 
     def send_sms(self, number, text):
-        now = time.strftime("%H:%M")
+        """
+        SMS send is a two-step exchange:
+          1. AT+CMGS="number"  →  modem replies with >
+          2. text + ctrl-z     →  modem replies with +CMGS: <mr> / OK
 
-        # step 1: AT+CMGS → wait for >
-        lines1 = self._cmd(f'AT+CMGS="{number}"', timeout=8)
-        if ">" not in lines1:
-            return {"ok": False, "error": "No > prompt: " + str(lines1)}
-
-        # step 2: send text + ctrl-z via modem thread
-        # we post ctrl-z as the "command" — modem thread writes it raw,
-        # then collects the +CMGS / OK response
+        We use a special "SMS" tuple so the modem thread handles both
+        steps atomically without releasing collecting state between them.
+        """
+        now   = time.strftime("%H:%M")
         resp_q = queue.Queue()
-        self._cmd_queue.put((text + "\x1a", resp_q))
+        # post a 3-tuple to signal SMS mode: ('SMS', number, text)
+        self._cmd_queue.put(("SMS", number, text, resp_q))
         try:
-            lines2 = resp_q.get(timeout=30)
+            lines = resp_q.get(timeout=30)
         except queue.Empty:
-            return {"ok": False, "error": "Send timeout"}
+            self._cmd_queue.put((None, None))   # cancel token
+            return {"ok": False, "error": "SMS send timeout"}
 
-        if not self._ok(lines2):
-            err = next((l for l in lines2 if "ERROR" in l), "unknown")
+        if not self._ok(lines):
+            err = next((l for l in lines if "ERROR" in l), "unknown")
             return {"ok": False, "error": err}
 
-        mr  = next((l for l in lines2 if l.startswith("+CMGS:")), "")
+        mr  = next((l for l in lines if l.startswith("+CMGS:")), "")
         mid = mr.split(":")[-1].strip() if mr else str(_uuid_mod.uuid4())
         msg = {"id": mid, "dir": "out", "text": text,
                "ts": now, "status": "delivered"}

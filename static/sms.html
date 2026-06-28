@@ -291,7 +291,7 @@ function updateCounter(text) {
   const len = text.length;
   if (len === 0) { counter.textContent = ""; return; }
   // detect if UCS-2 needed (non-ASCII)
-  const isUcs2 = /[^ -]/.test(text);
+  const isUcs2 = (/[^\u0000-\u007F]/).test(text);
   const limit  = isUcs2 ? 70 : 160;
   const left   = limit - len;
   counter.textContent = `${len}/${limit}`;

@@ -221,13 +221,9 @@ async function init() {
     showCallScreen(number, "incoming");
   });
   SSE.on("hangup", d => {
-    clearInterval(callTimer);
-    document.getElementById("viewCall").classList.add("hidden");
-    document.getElementById("viewDial").classList.remove("hidden");
-    digits = "";
-    updateDisplay();
-    loadCallLog();
-    toast("Call ended" + (d.reason && d.reason !== "NO CARRIER" ? ": " + d.reason : ""));
+    rejecting = false;
+    resetToDialpad();
+    if (d.reason && d.reason !== "NO CARRIER") toast("Call ended: " + d.reason);
   });
   SSE.connect();
 }
@@ -347,19 +343,39 @@ async function hangup() {
   clearInterval(clccPoll);
   clccPoll   = null;
   callTimer  = null;
-  rejecting  = true;   // block RING URCs from re-showing screen
-  // reset UI immediately
+  rejecting  = true;
+
+  // disable both buttons immediately to prevent double-tap
+  document.querySelectorAll("#hangupRow button, #answerRow button")
+    .forEach(b => { b.disabled = true; b.style.opacity = "0.5"; });
+
+  // update status — do NOT hide the screen yet
+  // wait for NO CARRIER / hangup SSE to confirm before hiding
+  document.getElementById("callStatus").textContent = "Ending call...";
+
+  try {
+    await fetch("/api/call/hangup", {method:"POST"});
+  } catch(e) { toast("Backend unreachable"); }
+
+  // if hangup SSE hasn't fired within 4s, force-hide
+  setTimeout(() => {
+    rejecting = false;
+    resetToDialpad();
+  }, 4000);
+}
+
+function resetToDialpad() {
+  clearInterval(callTimer);
+  clearInterval(clccPoll);
+  clccPoll  = null;
+  callTimer = null;
+  // re-enable buttons for next call
+  document.querySelectorAll("#hangupRow button, #answerRow button")
+    .forEach(b => { b.disabled = false; b.style.opacity = ""; });
   document.getElementById("viewCall").classList.add("hidden");
   document.getElementById("viewDial").classList.remove("hidden");
   digits = "";
   updateDisplay();
-  try {
-    const r = await fetch("/api/call/hangup", {method:"POST"});
-    const d = await r.json();
-    if (!d.ok) toast("Hangup may have failed");
-  } catch(e) { toast("Backend unreachable"); }
-  // clear guard after 3s — enough time for RING URCs to stop
-  setTimeout(() => { rejecting = false; }, 3000);
   loadCallLog();
 }
 

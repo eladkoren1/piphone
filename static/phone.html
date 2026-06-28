@@ -295,18 +295,25 @@ function showCallScreen(number, direction) {
 let clccPoll = null;
 
 function startClccPoll() {
-  // poll /api/call/status every second until call is active
+  let attempts = 0;
+  const MAX    = 60;  // stop after 60 x 2s = 2 minutes
   clccPoll = setInterval(async () => {
+    if (!clccPoll) return;  // was cleared
+    attempts++;
+    if (attempts > MAX) { clearInterval(clccPoll); clccPoll = null; return; }
     try {
       const s = await (await fetch("/api/call/status")).json();
-      // if backend confirms active (other side answered) start timer
+      if (!s.active) {
+        // call dropped before answer
+        clearInterval(clccPoll); clccPoll = null;
+        return;
+      }
       if (s.active && s.started) {
-        clearInterval(clccPoll);
-        clccPoll = null;
+        clearInterval(clccPoll); clccPoll = null;
         startTimer();
       }
     } catch(e) {}
-  }, 1000);
+  }, 2000);
 }
 
 function startTimer() {
@@ -334,14 +341,23 @@ async function answerCall() {
 }
 
 async function hangup() {
+  // stop all polling first so nothing re-queues before ATH
   clearInterval(callTimer);
   clearInterval(clccPoll);
-  clccPoll = null;
-  try { await fetch("/api/call/hangup", {method:"POST"}); } catch(e) {}
+  clccPoll  = null;
+  callTimer = null;
+  // reset UI immediately — don't wait for network
   document.getElementById("viewCall").classList.add("hidden");
   document.getElementById("viewDial").classList.remove("hidden");
   digits = "";
   updateDisplay();
+  // send ATH — fire and forget, UI already reset
+  try {
+    const r = await fetch("/api/call/hangup", {method:"POST"});
+    const d = await r.json();
+    if (!d.ok) toast("Hangup may have failed");
+  } catch(e) { toast("Backend unreachable"); }
+  loadCallLog();
 }
 
 function toggleMute() {

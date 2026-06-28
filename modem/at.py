@@ -104,7 +104,7 @@ class ModemDriver:
                 if not collecting:
                     try:
                         cmd_str, resp_q = self._cmd_queue.get_nowait()
-                        log.debug("→ %r", cmd_str)
+                        log.info("→ %r", cmd_str)
                         self._ser.write((cmd_str + "\r\n").encode())
                         resp_lines = []
                         collecting = True
@@ -122,7 +122,7 @@ class ModemDriver:
                     line = line.strip()
                     if not line:
                         continue
-                    log.debug("← %r", line)
+                    log.info("← %r", line)
 
                     if collecting:
                         resp_lines.append(line)
@@ -179,7 +179,7 @@ class ModemDriver:
     # ── URC handler (called from modem thread only) ────────────────────────────
 
     def _handle_urc(self, line):
-        log.debug("URC: %r", line)
+        log.info("URC: %r", line)
         if line.startswith("+CMTI:"):
             idx = line.split(",")[-1].strip()
             # run in a separate thread so modem_loop stays responsive

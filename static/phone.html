@@ -284,10 +284,34 @@ function showCallScreen(number, direction) {
   document.getElementById("callStatus").textContent = incoming ? "Incoming call..." : "Calling...";
   document.getElementById("hangupRow").style.display  = incoming ? "none"  : "flex";
   document.getElementById("answerRow").style.display  = incoming ? "flex"  : "none";
-  if (!incoming) startTimer();
+  if (incoming) {
+    // incoming: wait for user to tap answer
+  } else {
+    // outgoing: poll for answer
+    startClccPoll();
+  }
+}
+
+let clccPoll = null;
+
+function startClccPoll() {
+  // poll /api/call/status every second until call is active
+  clccPoll = setInterval(async () => {
+    try {
+      const s = await (await fetch("/api/call/status")).json();
+      // if backend confirms active (other side answered) start timer
+      if (s.active && s.started) {
+        clearInterval(clccPoll);
+        clccPoll = null;
+        startTimer();
+      }
+    } catch(e) {}
+  }, 1000);
 }
 
 function startTimer() {
+  clearInterval(clccPoll);
+  clccPoll = null;
   callSecs = 0;
   document.getElementById("callStatus").textContent = "Connected";
   document.getElementById("callTimer").classList.remove("hidden");
@@ -311,6 +335,8 @@ async function answerCall() {
 
 async function hangup() {
   clearInterval(callTimer);
+  clearInterval(clccPoll);
+  clccPoll = null;
   try { await fetch("/api/call/hangup", {method:"POST"}); } catch(e) {}
   document.getElementById("viewCall").classList.add("hidden");
   document.getElementById("viewDial").classList.remove("hidden");

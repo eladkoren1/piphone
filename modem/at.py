@@ -483,9 +483,34 @@ class ModemDriver:
         return {"ok": self._ok(lines)}
 
     def call_status(self):
+        # poll AT+CLCC to detect when outgoing call is answered
         with self._data_lock:
             cs = dict(self._call_state)
-        if cs["active"] and cs["started"]:
+
+        if cs.get("active") and cs.get("direction") == "out" and not cs.get("started"):
+            lines = self._cmd("AT+CLCC")
+            # +CLCC: 1,0,0,0,0 — stat=0 means active (answered)
+            # +CLCC: 1,0,2,0,0 — stat=2 means dialing (still ringing)
+            # empty response means call ended
+            clcc = next((l for l in lines if l.startswith("+CLCC:")), None)
+            if clcc:
+                parts = clcc.split(",")
+                stat  = int(parts[2]) if len(parts) > 2 else -1
+                if stat == 0:  # active — other side answered
+                    with self._data_lock:
+                        self._call_state["started"] = time.time()
+                    cs["started"] = self._call_state["started"]
+            # no +CLCC means call dropped before answer — hangup URC may have been missed
+            elif all(l == "OK" for l in lines if l):
+                with self._data_lock:
+                    self._call_state = {"active": False, "number": None,
+                                        "direction": None, "started": None}
+                self._push(json.dumps({"type": "hangup", "reason": "NO CARRIER"}))
+                return {"active": False}
+
+        with self._data_lock:
+            cs = dict(self._call_state)
+        if cs.get("active") and cs.get("started"):
             cs["duration"] = int(time.time() - cs["started"])
         return cs
 

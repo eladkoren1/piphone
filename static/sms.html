@@ -37,6 +37,10 @@
 .bmeta.out{text-align:right}
 .tick{color:#93c5fd}
 .tick.sent{color:#7070a0}
+.char-counter{font-size:9px;color:var(--muted);text-align:right;
+  padding:0 46px 3px 0;background:var(--panel);flex-shrink:0}
+.char-counter.warn{color:#f59e0b}
+.char-counter.over{color:var(--red)}
 .compose{padding:6px 8px;border-top:0.5px solid var(--border-c);
   display:flex;gap:6px;align-items:flex-end;flex-shrink:0;background:var(--panel)}
 .ci{flex:1;background:var(--input-bg);border:0.5px solid var(--border-c);
@@ -104,6 +108,7 @@
       <button class="ibtn" onclick="window.location.href='/'" aria-label="Home"><i class="ti ti-home"></i></button>
     </div>
     <div class="msgs" id="msgs"></div>
+    <div class="char-counter" id="charCounter"></div>
     <div class="compose">
       <textarea class="ci" id="ci" placeholder="Message" rows="1" dir="auto"
         onkeydown="handleKey(event)" oninput="autoH(this)"></textarea>
@@ -275,7 +280,23 @@ async function sendMsg() {
 }
 
 function handleKey(e) { if (e.key==="Enter" && !e.shiftKey) { e.preventDefault(); sendMsg(); } }
-function autoH(el) { el.style.height="auto"; el.style.height=Math.min(el.scrollHeight,80)+"px"; }
+function autoH(el) {
+  el.style.height="auto";
+  el.style.height=Math.min(el.scrollHeight,80)+"px";
+  updateCounter(el.value);
+}
+function updateCounter(text) {
+  const counter = document.getElementById("charCounter");
+  if (!counter) return;
+  const len = text.length;
+  if (len === 0) { counter.textContent = ""; return; }
+  // detect if UCS-2 needed (non-ASCII)
+  const isUcs2 = /[^ -]/.test(text);
+  const limit  = isUcs2 ? 70 : 160;
+  const left   = limit - len;
+  counter.textContent = `${len}/${limit}`;
+  counter.className = "char-counter" + (left < 0 ? " over" : left < 20 ? " warn" : "");
+}
 
 function showNew()  { document.getElementById("newOverlay").classList.remove("hidden"); }
 function hideNew()  { document.getElementById("newOverlay").classList.add("hidden"); }

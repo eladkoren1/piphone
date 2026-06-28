@@ -1,15 +1,19 @@
 """
-modem/at.py — SIM7600G-H driver, clean single-reader state machine.
+modem/at.py — SIM7600G-H driver.
+Key design:
+  - One reader thread owns serial RX exclusively.
+  - _cmd_lock ensures only one AT command is in flight at a time.
+  - _resp_q is only written/read under _cmd_lock, so no races.
 """
 
-import serial, threading, time, queue, json, uuid as _uuid_mod, logging
+import serial, threading, time, queue
+import json, uuid as _uuid_mod, logging
 
 log = logging.getLogger("modem.at")
 
 FINAL = {"OK", "ERROR", "NO CARRIER", "BUSY", "NO ANSWER", "NO DIALTONE"}
 
-
-def _is_final(line: str) -> bool:
+def _is_final(line):
     return (line in FINAL
             or line.startswith("+CMS ERROR")
             or line.startswith("+CME ERROR"))
@@ -17,38 +21,34 @@ def _is_final(line: str) -> bool:
 
 class ModemDriver:
     def __init__(self, port="/dev/ttyUSB2", baudrate=115200):
-        self._port      = port
-        self._baudrate  = baudrate
-        self._data_lock = threading.Lock()   # guards _inbox, _call_state
-        self._sub_lock  = threading.Lock()   # guards _subscribers
-        self._ser_lock  = threading.Lock()   # guards write side of _ser
+        self._port     = port
+        self._baudrate = baudrate
+
+        # one command at a time — held for the full duration of a _cmd() call
+        self._cmd_lock  = threading.Lock()
+
+        # response queue — only valid while _cmd_lock is held
+        self._resp_q    = None
+
+        # data locks
+        self._data_lock = threading.Lock()
+        self._sub_lock  = threading.Lock()
 
         self._subscribers = []
         self._call_state  = {"active": False, "number": None,
                              "direction": None, "started": None}
         self._inbox = []
-
-        # pending response: set by _cmd(), cleared by reader
-        self._resp_q    = None   # queue.Queue | None
-        self._resp_lock = threading.Lock()
-
         self._running = True
+
         self._ser = serial.Serial(port, baudrate, timeout=0.05)
 
-        self._reader_thread = threading.Thread(target=self._reader_loop, daemon=True)
-        self._reader_thread.start()
+        threading.Thread(target=self._reader_loop, daemon=True).start()
 
         self._init_modem()
         self._load_inbox()
         threading.Thread(target=self._poll_loop, daemon=True).start()
 
-    # ── serial write ──────────────────────────────────────────────────────────
-
-    def _write(self, data: bytes):
-        with self._ser_lock:
-            self._ser.write(data)
-
-    # ── single reader loop ────────────────────────────────────────────────────
+    # ── reader — sole owner of RX ─────────────────────────────────────────────
 
     def _reader_loop(self):
         buf = ""
@@ -64,17 +64,12 @@ class ModemDriver:
                     line = line.strip()
                     if not line:
                         continue
-                    log.debug("← %s", line)
+                    log.debug("← %r", line)
 
-                    # route to pending response or URC handler
-                    with self._resp_lock:
-                        rq = self._resp_q
-
+                    # if a command is in flight, route to its queue
+                    rq = self._resp_q
                     if rq is not None:
                         rq.put(line)
-                        if _is_final(line) or line == ">":
-                            with self._resp_lock:
-                                self._resp_q = None
                     else:
                         self._handle_urc(line)
 
@@ -89,50 +84,52 @@ class ModemDriver:
         try:
             self._ser.close()
             self._ser = serial.Serial(self._port, self._baudrate, timeout=0.05)
-            log.info("Reconnected to %s", self._port)
+            log.info("Reconnected")
             self._init_modem()
         except Exception as e:
             log.error("Reconnect failed: %s", e)
 
-    # ── AT command ───────────────────────────────────────────────────────────
+    # ── send one AT command, collect response ─────────────────────────────────
 
-    def _cmd(self, command: str, timeout: float = 10.0) -> list[str]:
-        """Send command, collect all lines until final response."""
-        rq = queue.Queue()
-        with self._resp_lock:
-            self._resp_q = rq
+    def _cmd(self, command, timeout=10.0):
+        """
+        Serialize all AT commands through _cmd_lock.
+        Only one command is ever in flight — no _resp_q races possible.
+        """
+        with self._cmd_lock:
+            self._resp_q = queue.Queue()
+            log.debug("→ %r", command)
+            self._ser.write((command + "\r\n").encode())
 
-        log.debug("→ %s", command)
-        self._write((command + "\r\n").encode())
-
-        lines = []
-        deadline = time.time() + timeout
-        while True:
-            remaining = deadline - time.time()
-            if remaining <= 0:
-                log.warning("Timeout: %s", command)
-                with self._resp_lock:
-                    self._resp_q = None
-                break
-            try:
-                line = rq.get(timeout=min(remaining, 1.0))
-                lines.append(line)
-                if _is_final(line) or line == ">":
+            lines    = []
+            deadline = time.time() + timeout
+            while True:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    log.warning("Timeout: %s", command)
                     break
-            except queue.Empty:
-                continue
-        return lines
+                try:
+                    line = self._resp_q.get(timeout=min(remaining, 1.0))
+                    lines.append(line)
+                    if _is_final(line) or line == ">":
+                        break
+                except queue.Empty:
+                    continue
 
-    def _ok(self, lines: list[str]) -> bool:
+            self._resp_q = None
+            return lines
+
+    def _ok(self, lines):
         return "OK" in lines
 
-    # ── URC ──────────────────────────────────────────────────────────────────
+    # ── URC handler (called from reader when no command in flight) ────────────
 
-    def _handle_urc(self, line: str):
-        log.debug("URC: %s", line)
+    def _handle_urc(self, line):
+        log.debug("URC: %r", line)
         if line.startswith("+CMTI:"):
             idx = line.split(",")[-1].strip()
-            threading.Thread(target=self._handle_new_sms, args=(idx,), daemon=True).start()
+            threading.Thread(target=self._handle_new_sms,
+                             args=(idx,), daemon=True).start()
         elif line == "RING":
             with self._data_lock:
                 self._call_state.update({"active": True, "direction": "in"})
@@ -148,7 +145,7 @@ class ModemDriver:
                                     "direction": None, "started": None}
             self._push(json.dumps({"type": "hangup"}))
 
-    # ── init ─────────────────────────────────────────────────────────────────
+    # ── init ──────────────────────────────────────────────────────────────────
 
     def _init_modem(self):
         time.sleep(0.3)
@@ -157,7 +154,7 @@ class ModemDriver:
             r = self._cmd(cmd)
             log.info("%s → %s", cmd, r)
 
-    # ── SMS ──────────────────────────────────────────────────────────────────
+    # ── SMS ───────────────────────────────────────────────────────────────────
 
     def _load_inbox(self):
         lines = self._cmd('AT+CMGL="ALL"', timeout=20)
@@ -204,44 +201,59 @@ class ModemDriver:
         with self._data_lock:
             return copy.deepcopy(self._inbox)
 
-    def send_sms(self, number: str, text: str) -> dict:
+    def send_sms(self, number, text):
         now = time.strftime("%H:%M")
-
-        # step 1: send AT+CMGS, wait for >
-        lines1 = self._cmd(f'AT+CMGS="{number}"', timeout=8)
-        if ">" not in lines1:
-            return {"ok": False, "error": "No prompt: " + str(lines1)}
-
-        # step 2: send text + ctrl-z, wait for OK / +CMGS
-        rq = queue.Queue()
-        with self._resp_lock:
-            self._resp_q = rq
-        self._write((text + "\x1a").encode())
-
-        lines2 = []
-        deadline = time.time() + 30
-        while True:
-            remaining = deadline - time.time()
-            if remaining <= 0:
-                log.warning("SMS send timeout")
-                with self._resp_lock:
+        with self._cmd_lock:
+            # step 1: send AT+CMGS, wait for >
+            self._resp_q = queue.Queue()
+            self._ser.write(f'AT+CMGS="{number}"\r\n'.encode())
+            lines1 = []
+            deadline = time.time() + 8
+            while True:
+                remaining = deadline - time.time()
+                if remaining <= 0:
                     self._resp_q = None
-                return {"ok": False, "error": "Send timeout"}
-            try:
-                line = rq.get(timeout=min(remaining, 1.0))
-                lines2.append(line)
-                if _is_final(line):
-                    break
-            except queue.Empty:
-                continue
+                    return {"ok": False, "error": "No > prompt (timeout)"}
+                try:
+                    line = self._resp_q.get(timeout=min(remaining, 1.0))
+                    lines1.append(line)
+                    if line == ">" or _is_final(line):
+                        break
+                except queue.Empty:
+                    continue
+
+            if ">" not in lines1:
+                self._resp_q = None
+                return {"ok": False, "error": "No prompt: " + str(lines1)}
+
+            # step 2: send text + ctrl-z, wait for OK
+            self._resp_q = queue.Queue()
+            self._ser.write((text + "\x1a").encode())
+            lines2   = []
+            deadline = time.time() + 30
+            while True:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    self._resp_q = None
+                    return {"ok": False, "error": "Send timeout"}
+                try:
+                    line = self._resp_q.get(timeout=min(remaining, 1.0))
+                    lines2.append(line)
+                    if _is_final(line):
+                        break
+                except queue.Empty:
+                    continue
+
+            self._resp_q = None
 
         if not self._ok(lines2):
             err = next((l for l in lines2 if "ERROR" in l), "unknown")
             return {"ok": False, "error": err}
 
-        mr   = next((l for l in lines2 if l.startswith("+CMGS:")), "")
-        mid  = mr.split(":")[-1].strip() if mr else str(_uuid_mod.uuid4())
-        msg  = {"id": mid, "dir": "out", "text": text, "ts": now, "status": "delivered"}
+        mr  = next((l for l in lines2 if l.startswith("+CMGS:")), "")
+        mid = mr.split(":")[-1].strip() if mr else str(_uuid_mod.uuid4())
+        msg = {"id": mid, "dir": "out", "text": text,
+               "ts": now, "status": "delivered"}
 
         with self._data_lock:
             t = next((x for x in self._inbox if x["number"] == number), None)
@@ -255,10 +267,10 @@ class ModemDriver:
                 })
         return {"ok": True, "id": mid, "ts": now}
 
-    def delete_sms(self, msg_id: str) -> dict:
+    def delete_sms(self, msg_id):
         return {"ok": self._ok(self._cmd(f"AT+CMGD={msg_id}"))}
 
-    def _handle_new_sms(self, idx: str):
+    def _handle_new_sms(self, idx):
         lines  = self._cmd(f"AT+CMGR={idx}")
         header = next((l for l in lines if l.startswith("+CMGR:")), "")
         text   = next((l for l in lines
@@ -283,9 +295,9 @@ class ModemDriver:
         self._push(json.dumps({"type": "sms", "from": number,
                                "name": number, "preview": text}))
 
-    # ── Voice ─────────────────────────────────────────────────────────────────
+    # ── Voice ──────────────────────────────────────────────────────────────────
 
-    def dial(self, number: str) -> dict:
+    def dial(self, number):
         lines = self._cmd(f"ATD{number};")
         if self._ok(lines):
             with self._data_lock:
@@ -294,30 +306,30 @@ class ModemDriver:
             return {"ok": True, "number": number}
         return {"ok": False, "error": lines[-1] if lines else "no response"}
 
-    def hangup(self) -> dict:
+    def hangup(self):
         lines = self._cmd("ATH")
         with self._data_lock:
             self._call_state = {"active": False, "number": None,
                                 "direction": None, "started": None}
         return {"ok": self._ok(lines)}
 
-    def answer(self) -> dict:
+    def answer(self):
         lines = self._cmd("ATA")
         if self._ok(lines):
             with self._data_lock:
                 self._call_state["started"] = time.time()
         return {"ok": self._ok(lines)}
 
-    def call_status(self) -> dict:
+    def call_status(self):
         with self._data_lock:
             cs = dict(self._call_state)
         if cs["active"] and cs["started"]:
             cs["duration"] = int(time.time() - cs["started"])
         return cs
 
-    # ── Modem status ──────────────────────────────────────────────────────────
+    # ── Modem status ───────────────────────────────────────────────────────────
 
-    def get_status(self) -> dict:
+    def get_status(self):
         creg = self._cmd("AT+CREG?")
         csq  = self._cmd("AT+CSQ")
         cops = self._cmd("AT+COPS?")
@@ -344,7 +356,6 @@ class ModemDriver:
 
         rat_map = {0:"GSM", 2:"UTRAN", 3:"GSM/EDGE", 4:"UTRAN/HSDPA",
                    7:"LTE", 11:"NR", 13:"LTE/NR"}
-
         registered = any("+CREG: 0,1" in l or "+CREG: 0,5" in l for l in creg)
         roaming    = any("+CREG: 0,5" in l for l in creg)
         imsi       = next((l for l in cimi if l[:3].isdigit()), "")
@@ -354,7 +365,7 @@ class ModemDriver:
                 "registered": registered, "roaming": roaming,
                 "imei": "", "sim_number": imsi, "dummy": False}
 
-    def ussd(self, code: str) -> dict:
+    def ussd(self, code):
         lines = self._cmd(f'AT+CUSD=1,"{code}",15', timeout=15)
         resp  = next((l for l in lines if l.startswith("+CUSD:")), "")
         return {"ok": True, "response": resp}
@@ -371,13 +382,13 @@ class ModemDriver:
         with self._sub_lock:
             self._subscribers = [s for s in self._subscribers if s is not q]
 
-    def _push(self, payload: str):
+    def _push(self, payload):
         with self._sub_lock:
             for q in self._subscribers:
                 try: q.put_nowait(payload)
                 except queue.Full: pass
 
-    # ── Poll fallback ─────────────────────────────────────────────────────────
+    # ── Poll fallback ──────────────────────────────────────────────────────────
 
     def _poll_loop(self):
         while self._running:

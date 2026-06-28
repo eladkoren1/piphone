@@ -190,7 +190,7 @@ function updateEditHint() {
   const raw  = document.getElementById("editNum").value.trim();
   const hint = document.getElementById("editHint");
   if (raw.length >= 3) {
-    hint.textContent = "→ " + normalizeNumber(raw);
+    hint.textContent = "-> " + normalizeNumber(raw);
   } else {
     hint.textContent = "";
   }
@@ -220,7 +220,7 @@ function showEdit(id) {
   document.getElementById("editLastName").value  = c.last_name  || "";
   document.getElementById("editNum").value       = c.number;
   document.getElementById("editEmail").value     = c.email || "";
-  document.getElementById("editHint").textContent = "→ " + c.number;
+  document.getElementById("editHint").textContent = "-> " + c.number;
   document.getElementById("editActions").style.display = "flex";
   buildColorRow(); updateEditAv();
   document.getElementById("editOverlay").classList.remove("hidden");

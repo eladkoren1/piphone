@@ -168,10 +168,16 @@ async function init() {
 
   SSE.on("sms", async d => {
     await fetchInbox();
-    if (active && normalizeNumber(active.number) === normalizeNumber(d.from)) {
-      active = threads.find(t => normalizeNumber(t.number) === normalizeNumber(d.from)) || active;
-      renderMsgs(); scrollMsgs();
-    } else {
+    // always update active thread object from fresh thread list
+    if (active) {
+      const updated = threads.find(t => normalizeNumber(t.number) === normalizeNumber(active.number));
+      if (updated) {
+        active = updated;
+        renderMsgs(); scrollMsgs();
+      }
+    }
+    // toast if message is from someone other than open thread
+    if (!active || normalizeNumber(active.number) !== normalizeNumber(d.from)) {
       toast("SMS from " + Contacts.resolveName(d.from) + ": " + d.preview, 3500);
     }
   });

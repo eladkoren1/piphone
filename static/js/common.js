@@ -1,3 +1,11 @@
+// ── uuid fallback (works on HTTP) ─────────────────────────────────────────────
+function uuid() {
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, c => {
+    const r = Math.random() * 16 | 0;
+    return (c === "x" ? r : (r & 0x3 | 0x8)).toString(16);
+  });
+}
+
 /**
  * common.js — shared across all piphone apps
  * Provides: API, Contacts, normalizeNumber, StatusBar, SSE, toast
@@ -68,7 +76,7 @@ const Contacts = {
 
   async add(name, number) {
     const c = {
-      id: crypto.randomUUID(),
+      id: uuid(),
       name: name.trim(),
       number: normalizeNumber(number),
       color: COLORS[this._list.length % COLORS.length],

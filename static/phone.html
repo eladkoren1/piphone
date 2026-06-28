@@ -71,6 +71,7 @@
 .tab{flex:1;padding:10px;text-align:center;font-size:12px;color:var(--muted);
   cursor:pointer;border-bottom:2px solid transparent}
 .tab.active{color:var(--txt);border-bottom-color:var(--accent)}
+@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -130,8 +131,7 @@
     <div id="tabLog" style="display:none;flex-direction:column;flex:1;overflow:hidden">
       <div class="log-list" id="logList">
         <div style="text-align:center;padding:40px 0;color:var(--muted);font-size:12px">
-          <i class="ti ti-clock" style="font-size:32px;opacity:0.3;display:block;margin-bottom:8px"></i>
-          Call log coming soon
+          <i class="ti ti-loader" style="font-size:32px;opacity:0.3;display:block;margin-bottom:8px;animation:spin 1s linear infinite"></i>
         </div>
       </div>
     </div>
@@ -167,9 +167,17 @@
           </div>
         </div>
         <div style="height:20px"></div>
-        <div class="hangup-row">
+        <div class="hangup-row" id="hangupRow">
           <button class="hangup-btn" onclick="hangup()" aria-label="Hang up">
             <i class="ti ti-phone-off"></i>
+          </button>
+        </div>
+        <div class="hangup-row hidden" id="answerRow" style="gap:40px;display:none">
+          <button class="hangup-btn" style="background:#dc2626" onclick="hangup()" aria-label="Reject">
+            <i class="ti ti-phone-off"></i>
+          </button>
+          <button class="hangup-btn" style="background:#16a34a" onclick="answerCall()" aria-label="Answer">
+            <i class="ti ti-phone"></i>
           </button>
         </div>
       </div>
@@ -194,17 +202,31 @@ async function init() {
   // if opened from SMS app with ?calling=number
   const params = new URLSearchParams(window.location.search);
   const calling = params.get("calling");
+  const ringing = params.get("ring");
   if (calling) {
     digits = calling;
     updateDisplay();
     await makeCall();
-  }
-  // SSE for incoming ring
-  SSE.on("ring", d => {
-    digits = d.from || "";
+  } else if (ringing) {
+    digits = ringing;
     updateDisplay();
-    showCallScreen(d.from || "", "incoming");
-    document.getElementById("callStatus").textContent = "Incoming call...";
+    showCallScreen(ringing, "incoming");
+  }
+  // SSE handlers
+  SSE.on("ring", d => {
+    const number = d.from || "";
+    digits = number;
+    updateDisplay();
+    showCallScreen(number, "incoming");
+  });
+  SSE.on("hangup", d => {
+    clearInterval(callTimer);
+    document.getElementById("viewCall").classList.add("hidden");
+    document.getElementById("viewDial").classList.remove("hidden");
+    digits = "";
+    updateDisplay();
+    loadCallLog();
+    toast("Call ended" + (d.reason && d.reason !== "NO CARRIER" ? ": " + d.reason : ""));
   });
   SSE.connect();
 }
@@ -255,11 +277,14 @@ function showCallScreen(number, direction) {
   av.style.background  = color;
   document.getElementById("callName").textContent   = name;
   document.getElementById("callNum").textContent    = formatDisplay(number);
-  document.getElementById("callStatus").textContent = direction === "incoming" ? "Incoming..." : "Calling...";
   document.getElementById("callTimer").classList.add("hidden");
   document.getElementById("viewDial").classList.add("hidden");
   document.getElementById("viewCall").classList.remove("hidden");
-  if (direction === "outgoing") startTimer();
+  const incoming = direction === "incoming";
+  document.getElementById("callStatus").textContent = incoming ? "Incoming call..." : "Calling...";
+  document.getElementById("hangupRow").style.display  = incoming ? "none"  : "flex";
+  document.getElementById("answerRow").style.display  = incoming ? "flex"  : "none";
+  if (!incoming) startTimer();
 }
 
 function startTimer() {
@@ -272,6 +297,16 @@ function startTimer() {
     const s = String(callSecs % 60).padStart(2,"0");
     document.getElementById("callTimer").textContent = m + ":" + s;
   }, 1000);
+}
+
+async function answerCall() {
+  try {
+    await fetch("/api/call/answer", {method:"POST"});
+    document.getElementById("callStatus").textContent = "Connected";
+    document.getElementById("hangupRow").style.display = "flex";
+    document.getElementById("answerRow").style.display = "none";
+    startTimer();
+  } catch(e) { toast("Failed to answer"); }
 }
 
 async function hangup() {
@@ -301,7 +336,40 @@ function switchTab(tab) {
   document.querySelectorAll(".tab").forEach((t,i) => t.classList.toggle("active", (i===0&&tab==="dial")||(i===1&&tab==="log")));
   document.getElementById("tabDial").style.display = tab==="dial" ? "flex" : "none";
   document.getElementById("tabLog").style.display  = tab==="log"  ? "flex" : "none";
+  if (tab === "log") loadCallLog();
 }
+
+async function loadCallLog() {
+  try {
+    const calls = await (await fetch("/api/call/log")).json();
+    const el = document.getElementById("logList");
+    if (!calls.length) {
+      el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--muted);font-size:12px"><i class="ti ti-phone-off" style="font-size:32px;opacity:0.3;display:block;margin-bottom:8px"></i>No recent calls</div>';
+      return;
+    }
+    el.innerHTML = calls.map(c => {
+      const name  = Contacts.resolveName(c.number);
+      const color = Contacts.resolveColor(c.number);
+      const icon  = c.direction === "missed" ? "ti-phone-missed" :
+                    c.direction === "in"     ? "ti-phone-incoming" : "ti-phone-outgoing";
+      const cls   = c.direction === "missed" ? "missed" : c.direction === "out" ? "out" : "in";
+      const dt    = new Date(c.started_at * 1000);
+      const ts    = dt.toLocaleTimeString("en-IL", {hour:"2-digit",minute:"2-digit"});
+      const dur   = c.duration ? Math.floor(c.duration/60)+"m "+String(c.duration%60).padStart(2,"0")+"s" : "";
+      return \`<div class="log-item" onclick="digits=\${JSON.stringify(c.number)};updateDisplay()">
+        <div class="log-icon \${cls}"><i class="ti \${icon}"></i></div>
+        <div class="log-body">
+          <div class="log-name">\${esc(name)}</div>
+          <div class="log-meta">\${ts}\${dur?" - "+dur:""}</div>
+        </div>
+        <i class="ti ti-phone" style="color:var(--muted);font-size:14px;cursor:pointer"
+           onclick="event.stopPropagation();digits=\${JSON.stringify(c.number)};updateDisplay();switchTab('dial')"></i>
+      </div>\`;
+    }).join("");
+  } catch(e) { console.error("call log:", e); }
+}
+
+function esc(s) { const d=document.createElement("div"); d.textContent=String(s||""); return d.innerHTML; }
 
 function showContacts() { window.location.href = "contacts.html"; }
 

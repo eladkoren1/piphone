@@ -17,7 +17,8 @@ import db
 
 log = logging.getLogger("modem.at")
 
-FINAL = {"OK", "ERROR", "NO CARRIER", "BUSY", "NO ANSWER", "NO DIALTONE"}
+FINAL = {"OK", "ERROR", "BUSY", "NO ANSWER", "NO DIALTONE"}
+CALL_END = {"NO CARRIER", "NO ANSWER", "BUSY", "NO DIALTONE"}
 
 def _is_final(line):
     return (line in FINAL
@@ -290,18 +291,32 @@ class ModemDriver:
                              args=(idx,), daemon=True).start()
         elif line == "RING":
             with self._data_lock:
-                self._call_state.update({"active": True, "direction": "in"})
+                if not self._call_state.get("active"):
+                    self._call_state.update({"active": True, "direction": "in",
+                                             "started": None})
             self._push(json.dumps({"type": "ring", "from": "unknown"}))
         elif line.startswith("+CLIP:"):
-            number = line.split('"')[1] if '"' in line else ""
+            parts  = line.split('"')
+            number = ucs2_decode(parts[1]) if len(parts) > 1 else ""
             with self._data_lock:
                 self._call_state["number"] = number
-            self._push(json.dumps({"type": "ring", "from": number}))
-        elif line == "NO CARRIER":
+            self._push(json.dumps({"type": "ring", "from": number,
+                                   "name": number}))
+        elif line in CALL_END:
             with self._data_lock:
+                cs = dict(self._call_state)
                 self._call_state = {"active": False, "number": None,
                                     "direction": None, "started": None}
-            self._push(json.dumps({"type": "hangup"}))
+            # log missed/ended call
+            if cs.get("number"):
+                duration = int(time.time() - cs["started"]) if cs.get("started") else 0
+                direction = cs.get("direction") or "in"
+                if direction == "in" and not cs.get("started"):
+                    direction = "missed"
+                db.calls_add(cs["number"], direction,
+                             started_at=int(cs["started"] or time.time()),
+                             duration=duration)
+            self._push(json.dumps({"type": "hangup", "reason": line}))
 
     # ── init ──────────────────────────────────────────────────────────────────
 

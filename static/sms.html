@@ -105,7 +105,7 @@
     </div>
     <div class="msgs" id="msgs"></div>
     <div class="compose">
-      <textarea class="ci" id="ci" placeholder="Message" rows="1"
+      <textarea class="ci" id="ci" placeholder="Message" rows="1" dir="auto"
         onkeydown="handleKey(event)" oninput="autoH(this)"></textarea>
       <button class="sbtn" onclick="sendMsg()" aria-label="Send"><i class="ti ti-send"></i></button>
     </div>
@@ -234,7 +234,7 @@ function renderMsgs() {
     '<div class="datesep">Today</div>' +
     active.messages.map(m => `
       <div class="bwrap ${m.dir}">
-        <div class="bub ${m.dir}">${esc(m.text)}</div>
+        <div class="bub ${m.dir}" dir="auto">${esc(m.text)}</div>
         <div class="bmeta ${m.dir}">${esc(m.ts)}
           ${m.dir==="out" ? `<span class="tick ${m.status==="read"?"":"sent"}"> ✓✓</span>` : ""}
         </div>

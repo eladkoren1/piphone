@@ -52,6 +52,26 @@ def find_modem_port(baudrate=115200, timeout=1.0):
             log.debug("%s → %s", port, e)
     return None
 
+
+def ucs2_encode(text):
+    """Encode text to UCS-2 hex string for AT commands."""
+    return text.encode("utf-16-be").hex().upper()
+
+def ucs2_decode(hex_str):
+    """Decode UCS-2 hex string from modem to Python string."""
+    try:
+        return bytes.fromhex(hex_str).decode("utf-16-be")
+    except Exception:
+        return hex_str  # return raw if decode fails
+
+def needs_ucs2(text):
+    """True if text contains non-GSM7 characters (e.g. Hebrew, emoji)."""
+    try:
+        text.encode("gsm03.38")
+        return False
+    except Exception:
+        return True
+
 class ModemDriver:
     def __init__(self, port=None, baudrate=115200):
         if port is None:
@@ -119,9 +139,11 @@ class ModemDriver:
                             # SMS 4-tuple: ("SMS", number, text, resp_q)
                             _, sms_number, sms_text, resp_q = item
                             log.info("→ SMS to %s", sms_number)
+                            # encode number as UCS-2 hex for modem
+                            enc_number = ucs2_encode(sms_number)
                             # step 1: send AT+CMGS
                             self._ser.write(
-                                f'AT+CMGS="{sms_number}"\r\n'.encode())
+                                f'AT+CMGS="{enc_number}"\r\n'.encode())
                             resp_lines = []
                             sms_phase  = 1   # waiting for >
                             sms_text_pending = sms_text
@@ -284,6 +306,7 @@ class ModemDriver:
     def _init_modem(self):
         time.sleep(0.3)
         for cmd in ("ATE0", "AT+CMEE=2", "AT+CMGF=1",
+                    'AT+CSCS="UCS2"',
                     "AT+CNMI=2,1,0,0,0", "AT+CLIP=1"):
             r = self._cmd(cmd)
             log.info("%s → %s", cmd, r)
@@ -320,14 +343,16 @@ class ModemDriver:
                 parts  = line[7:].split(",")
                 idx    = parts[0].strip()
                 stat   = parts[1].strip().strip('"')
-                number = parts[2].strip().strip('"')
+                raw_num = parts[2].strip().strip('"')
+                number  = ucs2_decode(raw_num) if raw_num else raw_num
                 try:
                     scts = parts[4].strip().strip('"') if len(parts) > 4 else ""
                     ts   = scts[9:14] if len(scts) >= 14 else ""
                 except Exception:
                     ts = ""
                 i += 1
-                text      = lines[i].strip() if i < len(lines) else ""
+                raw_text  = lines[i].strip() if i < len(lines) else ""
+                text      = ucs2_decode(raw_text) if raw_text else ""
                 direction = "in" if "REC" in stat else "out"
                 unread    = stat == "REC UNREAD"
                 if number not in threads_map:
@@ -395,12 +420,16 @@ class ModemDriver:
     def _handle_new_sms(self, idx):
         lines  = self._cmd(f"AT+CMGR={idx}")
         header = next((l for l in lines if l.startswith("+CMGR:")), "")
-        text   = next((l for l in lines
+        raw_text = next((l for l in lines
                        if l and not l.startswith("+") and l != "OK"), "")
+        # try UCS-2 decode; fall back to raw if not valid hex
+        text = ucs2_decode(raw_text) if raw_text else ""
         if not header:
             return
         parts  = header[7:].split(",")
-        number = parts[1].strip().strip('"') if len(parts) > 1 else "unknown"
+        raw_num = parts[1].strip().strip('"') if len(parts) > 1 else "unknown"
+        # number may be UCS-2 encoded by modem
+        number = ucs2_decode(raw_num) if raw_num else "unknown"
         ts     = time.strftime("%H:%M")
         msg    = {"id": idx, "dir": "in", "text": text, "ts": ts, "status": ""}
         if not db.messages_exists(idx, number):

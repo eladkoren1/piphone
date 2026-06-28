@@ -469,7 +469,12 @@ class ModemDriver:
         return {"ok": False, "error": lines[-1] if lines else "no response"}
 
     def hangup(self):
-        lines = self._cmd("ATH")
+        # AT+CHUP cancels both ringing (unanswered) and active calls
+        # ATH alone doesn't cancel outgoing unanswered calls on some modems
+        lines = self._cmd("AT+CHUP")
+        if not self._ok(lines):
+            # fallback to ATH
+            lines = self._cmd("ATH")
         with self._data_lock:
             self._call_state = {"active": False, "number": None,
                                 "direction": None, "started": None}

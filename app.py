@@ -12,7 +12,7 @@ from modem.at import ModemDriver
 app = Flask(__name__, static_folder="static", static_url_path="")
 CORS(app)
 
-modem = ModemDriver(port="/dev/ttyUSB2", baudrate=115200)
+modem = ModemDriver()
 
 # ── serve the frontend ────────────────────────────────────────────────────────
 

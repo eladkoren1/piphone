@@ -22,8 +22,39 @@ def _is_final(line):
             or line.startswith("+CME ERROR"))
 
 
+
+def find_modem_port(baudrate=115200, timeout=1.0):
+    """
+    Probe each /dev/ttyUSB* port and return the first one
+    that responds to AT with OK. Returns None if not found.
+    """
+    import glob, serial, time
+    candidates = sorted(glob.glob("/dev/ttyUSB*"))
+    log.info("Probing ports: %s", candidates)
+    for port in candidates:
+        try:
+            ser = serial.Serial(port, baudrate, timeout=timeout)
+            time.sleep(0.2)
+            ser.reset_input_buffer()
+            ser.write(b"AT\r\n")
+            time.sleep(0.3)
+            resp = ser.read(64).decode(errors="replace")
+            ser.close()
+            if "OK" in resp:
+                log.info("Modem found on %s", port)
+                return port
+            else:
+                log.debug("%s → no OK (got %r)", port, resp)
+        except Exception as e:
+            log.debug("%s → %s", port, e)
+    return None
+
 class ModemDriver:
-    def __init__(self, port="/dev/ttyUSB2", baudrate=115200):
+    def __init__(self, port=None, baudrate=115200):
+        if port is None:
+            port = find_modem_port(baudrate)
+            if port is None:
+                raise RuntimeError("No modem found on any /dev/ttyUSB* port")
         self._port     = port
         self._baudrate = baudrate
 

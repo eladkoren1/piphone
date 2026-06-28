@@ -6,6 +6,11 @@ Dummy mode: all modem calls are stubbed, swap in modem/at.py later.
 from flask import Flask, jsonify, request, send_from_directory
 from flask_cors import CORS
 import os, time, threading
+import logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(threadName)s] %(levelname)s %(name)s: %(message)s"
+)
 
 from modem.at import ModemDriver
 

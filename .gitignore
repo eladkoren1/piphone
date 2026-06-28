@@ -5,3 +5,4 @@ __pycache__/
 contacts.json
 *.log
 .env
+messages.json

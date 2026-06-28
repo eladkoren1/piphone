@@ -361,7 +361,7 @@ async function loadCallLog() {
       const m     = Math.floor(c.duration / 60);
       const s     = String(c.duration % 60).padStart(2, "0");
       const dur   = c.duration ? (m + "m " + s + "s") : "";
-      const num   = JSON.stringify(c.number);
+      const num   = "'" + c.number.replace(/'/g, "&#39;") + "'";
       return '<div class="log-item" onclick="digits=' + num + ';updateDisplay()">' +
         '<div class="log-icon ' + cls + '"><i class="ti ' + icon + '"></i></div>' +
         '<div class="log-body">' +
@@ -369,7 +369,7 @@ async function loadCallLog() {
           '<div class="log-meta">' + ts + (dur ? " - " + dur : "") + '</div>' +
         '</div>' +
         '<i class="ti ti-phone" style="color:var(--muted);font-size:14px;cursor:pointer"' +
-          ' onclick="event.stopPropagation();digits=' + num + ';updateDisplay();switchTab('dial')"></i>' +
+          ' onclick="event.stopPropagation();digits=' + num + ';updateDisplay();switchTab(&apos;dial&apos;)"></i>' +
       '</div>';
     }).join("");
   } catch(e) { console.error("call log:", e); }

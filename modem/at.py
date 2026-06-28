@@ -193,7 +193,9 @@ class ModemDriver:
                     log.info("← '>'")
                     resp_lines.append(">")
                     log.info("→ <sms body + ctrl-z>")
-                    self._ser.write((sms_text_pending + "\x1a").encode())
+                    enc_body = ucs2_encode(sms_text_pending[:70])
+                    log.info("→ body hex: %s", enc_body)
+                    self._ser.write((enc_body + "\x1a").encode())
                     sms_phase = 2
                     continue
 
@@ -308,7 +310,6 @@ class ModemDriver:
         time.sleep(0.3)
         for cmd in ("ATE0", "AT+CMEE=2", "AT+CMGF=1",
                     'AT+CSCS="UCS2"',
-                    "AT+CSMP=1,167,0,8",
                     "AT+CNMI=2,1,0,0,0", "AT+CLIP=1"):
             r = self._cmd(cmd)
             log.info("%s → %s", cmd, r)

@@ -344,30 +344,37 @@ async function loadCallLog() {
     const calls = await (await fetch("/api/call/log")).json();
     const el = document.getElementById("logList");
     if (!calls.length) {
-      el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--muted);font-size:12px"><i class="ti ti-phone-off" style="font-size:32px;opacity:0.3;display:block;margin-bottom:8px"></i>No recent calls</div>';
+      el.innerHTML = '<div style="text-align:center;padding:40px 0;color:var(--muted);font-size:12px">' +
+        '<i class="ti ti-phone-off" style="font-size:32px;opacity:0.3;display:block;margin-bottom:8px"></i>' +
+        'No recent calls</div>';
       return;
     }
-    el.innerHTML = calls.map(c => {
+    el.innerHTML = calls.map(function(c) {
       const name  = Contacts.resolveName(c.number);
       const color = Contacts.resolveColor(c.number);
-      const icon  = c.direction === "missed" ? "ti-phone-missed" :
-                    c.direction === "in"     ? "ti-phone-incoming" : "ti-phone-outgoing";
-      const cls   = c.direction === "missed" ? "missed" : c.direction === "out" ? "out" : "in";
+      const icon  = c.direction === "missed"  ? "ti-phone-missed" :
+                    c.direction === "in"       ? "ti-phone-incoming" : "ti-phone-outgoing";
+      const cls   = c.direction === "missed"  ? "missed" :
+                    c.direction === "out"      ? "out" : "in";
       const dt    = new Date(c.started_at * 1000);
-      const ts    = dt.toLocaleTimeString("en-IL", {hour:"2-digit",minute:"2-digit"});
-      const dur   = c.duration ? Math.floor(c.duration/60)+"m "+String(c.duration%60).padStart(2,"0")+"s" : "";
-      return \`<div class="log-item" onclick="digits=\${JSON.stringify(c.number)};updateDisplay()">
-        <div class="log-icon \${cls}"><i class="ti \${icon}"></i></div>
-        <div class="log-body">
-          <div class="log-name">\${esc(name)}</div>
-          <div class="log-meta">\${ts}\${dur?" - "+dur:""}</div>
-        </div>
-        <i class="ti ti-phone" style="color:var(--muted);font-size:14px;cursor:pointer"
-           onclick="event.stopPropagation();digits=\${JSON.stringify(c.number)};updateDisplay();switchTab('dial')"></i>
-      </div>\`;
+      const ts    = dt.toLocaleTimeString("en-IL", {hour:"2-digit", minute:"2-digit"});
+      const m     = Math.floor(c.duration / 60);
+      const s     = String(c.duration % 60).padStart(2, "0");
+      const dur   = c.duration ? (m + "m " + s + "s") : "";
+      const num   = JSON.stringify(c.number);
+      return '<div class="log-item" onclick="digits=' + num + ';updateDisplay()">' +
+        '<div class="log-icon ' + cls + '"><i class="ti ' + icon + '"></i></div>' +
+        '<div class="log-body">' +
+          '<div class="log-name">' + esc(name) + '</div>' +
+          '<div class="log-meta">' + ts + (dur ? " - " + dur : "") + '</div>' +
+        '</div>' +
+        '<i class="ti ti-phone" style="color:var(--muted);font-size:14px;cursor:pointer"' +
+          ' onclick="event.stopPropagation();digits=' + num + ';updateDisplay();switchTab('dial')"></i>' +
+      '</div>';
     }).join("");
   } catch(e) { console.error("call log:", e); }
 }
+
 
 function esc(s) { const d=document.createElement("div"); d.textContent=String(s||""); return d.innerHTML; }
 

@@ -174,8 +174,10 @@ function selectColor(col) {
 }
 
 function updateEditAv() {
-  const name = document.getElementById("editName").value.trim();
-  const av   = document.getElementById("editAv");
+  const first = document.getElementById("editFirstName").value.trim();
+  const last  = document.getElementById("editLastName").value.trim();
+  const name  = (first + " " + last).trim();
+  const av    = document.getElementById("editAv");
   av.textContent      = name ? Contacts.initials(name) : "?";
   av.style.background = selectedColor;
 }
@@ -194,8 +196,10 @@ function showAdd() {
   editingId = null;
   selectedColor = COLORS[Contacts.all().length % COLORS.length];
   document.getElementById("editTitle").textContent = "New contact";
-  document.getElementById("editName").value = "";
-  document.getElementById("editNum").value  = "";
+  document.getElementById("editFirstName").value = "";
+  document.getElementById("editLastName").value  = "";
+  document.getElementById("editNum").value       = "";
+  document.getElementById("editEmail").value     = "";
   document.getElementById("editHint").textContent = "";
   document.getElementById("editActions").style.display = "none";
   buildColorRow(); updateEditAv();
@@ -208,8 +212,10 @@ function showEdit(id) {
   editingId     = id;
   selectedColor = c.color;
   document.getElementById("editTitle").textContent = "Edit contact";
-  document.getElementById("editName").value = c.name;
-  document.getElementById("editNum").value  = c.number;
+  document.getElementById("editFirstName").value = c.first_name || "";
+  document.getElementById("editLastName").value  = c.last_name  || "";
+  document.getElementById("editNum").value       = c.number;
+  document.getElementById("editEmail").value     = c.email || "";
   document.getElementById("editHint").textContent = "→ " + c.number;
   document.getElementById("editActions").style.display = "flex";
   buildColorRow(); updateEditAv();
@@ -220,28 +226,45 @@ function hideEdit() { document.getElementById("editOverlay").classList.add("hidd
 function overlayBg(e) { if (e.target.id==="editOverlay") hideEdit(); }
 
 async function saveContact() {
-  const name = document.getElementById("editName").value.trim();
-  const raw  = document.getElementById("editNum").value.trim();
-  if (!name) { toast("Name required"); return; }
-  if (!raw)  { toast("Number required"); return; }
-  if (editingId) {
-    const c = await Contacts.update(editingId, name, raw);
-    c.color = selectedColor;
-    await Contacts.save();
-  } else {
-    const c = await Contacts.add(name, raw);
-    c.color = selectedColor;
-    await Contacts.save();
-  }
-  hideEdit();
-  renderList(Contacts.all());
-  toast(editingId ? "Contact updated" : "Contact saved");
-  editingId = null;
+  const firstName = document.getElementById("editFirstName").value.trim();
+  const lastName  = document.getElementById("editLastName").value.trim();
+  const raw       = document.getElementById("editNum").value.trim();
+  const email     = document.getElementById("editEmail").value.trim();
+  if (!firstName) { toast("First name required"); return; }
+  if (!raw)       { toast("Number required"); return; }
+  const payload = {
+    first_name: firstName, last_name: lastName,
+    number: normalizeNumber(raw), email, color: selectedColor
+  };
+  try {
+    let r;
+    if (editingId) {
+      payload.id = editingId;
+      r = await (await fetch("/api/contacts/update", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      })).json();
+    } else {
+      r = await (await fetch("/api/contacts/add", {
+        method:"POST", headers:{"Content-Type":"application/json"},
+        body: JSON.stringify(payload)
+      })).json();
+    }
+    await Contacts.load();
+    hideEdit();
+    renderList(Contacts.all());
+    toast(editingId ? "Contact updated" : "Contact saved");
+    editingId = null;
+  } catch(e) { toast("Save failed"); }
 }
 
 async function deleteContact() {
   if (!editingId) return;
-  await Contacts.remove(editingId);
+  await fetch("/api/contacts/delete", {
+    method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({id: editingId})
+  });
+  await Contacts.load();
   hideEdit();
   renderList(Contacts.all());
   toast("Contact deleted");

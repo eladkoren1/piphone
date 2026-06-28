@@ -6,3 +6,4 @@ contacts.json
 *.log
 .env
 messages.json
+piphone.db

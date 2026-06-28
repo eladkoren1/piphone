@@ -47,14 +47,6 @@ const Contacts = {
     return this._list;
   },
 
-  async save() {
-    await fetch(API + "/api/contacts/save", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(this._list),
-    });
-  },
-
   all() { return this._list; },
 
   get(id) { return this._list.find(c => c.id === id); },
@@ -74,34 +66,9 @@ const Contacts = {
     return c ? c.color : "#1d4ed8";
   },
 
-  async add(name, number) {
-    const c = {
-      id: uuid(),
-      name: name.trim(),
-      number: normalizeNumber(number),
-      color: COLORS[this._list.length % COLORS.length],
-    };
-    this._list.push(c);
-    await this.save();
-    return c;
-  },
-
-  async update(id, name, number) {
-    const c = this._list.find(x => x.id === id);
-    if (!c) return;
-    c.name   = name.trim();
-    c.number = normalizeNumber(number);
-    await this.save();
-    return c;
-  },
-
-  async remove(id) {
-    this._list = this._list.filter(c => c.id !== id);
-    await this.save();
-  },
-
   initials(name) {
-    return name.split(" ").map(w => w[0]).join("").slice(0, 2).toUpperCase();
+    if (!name) return "?";
+    return name.split(" ").map(w => w[0]).filter(Boolean).join("").slice(0, 2).toUpperCase();
   },
 };
 

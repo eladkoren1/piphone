@@ -11,9 +11,9 @@ API threads communicate via:
 
 import serial, threading, time, queue
 import json, uuid as _uuid_mod, logging
-import os
-
-STORE_FILE = os.path.join(os.path.dirname(__file__), "..", "messages.json")
+import os, sys
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+import db
 
 log = logging.getLogger("modem.at")
 
@@ -281,51 +281,6 @@ class ModemDriver:
     # ── init ──────────────────────────────────────────────────────────────────
 
 
-    def _load_store(self):
-        """Load persisted messages from messages.json."""
-        try:
-            with open(STORE_FILE) as f:
-                return json.load(f)
-        except (FileNotFoundError, json.JSONDecodeError):
-            return []
-
-    def _save_store(self):
-        """Persist current inbox to messages.json."""
-        with self._data_lock:
-            data = self._inbox[:]
-        try:
-            with open(STORE_FILE, "w") as f:
-                json.dump(data, f, indent=2, ensure_ascii=False)
-        except Exception as e:
-            log.warning("Failed to save message store: %s", e)
-
-    def _merge_inbox(self, from_sim):
-        """
-        Merge SIM messages into the persisted store.
-        - Start with store as base (preserves sent messages + history)
-        - Add any SIM messages not already in store (by id)
-        - Mark SIM messages as no longer unread if already seen
-        """
-        store = self._load_store()
-
-        # build lookup: number -> thread, message id -> message
-        store_map = {t["number"]: t for t in store}
-
-        for sim_thread in from_sim:
-            number = sim_thread["number"]
-            if number not in store_map:
-                store_map[number] = sim_thread
-            else:
-                stored = store_map[number]
-                stored_ids = {m["id"] for m in stored["messages"]}
-                for m in sim_thread["messages"]:
-                    if m["id"] not in stored_ids:
-                        stored["messages"].append(m)
-                # update unread count from SIM (source of truth for unread)
-                stored["unread"] = sim_thread.get("unread", 0)
-
-        return list(store_map.values())
-
     def _init_modem(self):
         time.sleep(0.3)
         for cmd in ("ATE0", "AT+CMEE=2", "AT+CMGF=1",
@@ -336,14 +291,25 @@ class ModemDriver:
     # ── SMS ───────────────────────────────────────────────────────────────────
 
     def _load_inbox(self):
-        lines = self._cmd('AT+CMGL="ALL"', timeout=20)
+        """Load persisted messages from DB, then merge any new SIM messages."""
+        lines    = self._cmd('AT+CMGL="ALL"', timeout=20)
         from_sim = self._parse_cmgl(lines)
-        merged   = self._merge_inbox(from_sim)
+        # persist any SIM messages not already in DB
+        for t in from_sim:
+            for m in t["messages"]:
+                if m.get("sim_index") and not db.messages_exists(
+                        m["sim_index"], t["number"]):
+                    db.messages_add(
+                        number    = t["number"],
+                        direction = m["dir"],
+                        text      = m["text"],
+                        ts        = m["ts"],
+                        status    = m["status"],
+                        sim_index = m["sim_index"],
+                    )
         with self._data_lock:
-            self._inbox = merged
-        self._save_store()
-        log.info("Inbox: %d threads (%d from SIM, %d from store)",
-                 len(merged), len(from_sim), len(self._load_store()))
+            self._inbox = db.messages_get_inbox()
+        log.info("Inbox: %d threads", len(self._inbox))
 
     def _parse_cmgl(self, lines):
         threads_map = {}
@@ -373,6 +339,7 @@ class ModemDriver:
                 threads_map[number]["messages"].append({
                     "id": idx, "dir": direction, "text": text,
                     "ts": ts, "status": "" if direction == "in" else "delivered",
+                    "sim_index": idx,
                 })
                 if unread:
                     threads_map[number]["unread"] += 1
@@ -380,9 +347,7 @@ class ModemDriver:
         return list(threads_map.values())
 
     def get_inbox(self):
-        import copy
-        with self._data_lock:
-            return copy.deepcopy(self._inbox)
+        return db.messages_get_inbox()
 
     def send_sms(self, number, text):
         """
@@ -422,7 +387,6 @@ class ModemDriver:
                     "number": number, "color": "#1d4ed8",
                     "messages": [msg], "unread": 0,
                 })
-        self._save_store()
         return {"ok": True, "id": mid, "ts": now}
 
     def delete_sms(self, msg_id):
@@ -439,18 +403,10 @@ class ModemDriver:
         number = parts[1].strip().strip('"') if len(parts) > 1 else "unknown"
         ts     = time.strftime("%H:%M")
         msg    = {"id": idx, "dir": "in", "text": text, "ts": ts, "status": ""}
+        if not db.messages_exists(idx, number):
+            db.messages_add(number, "in", text, ts=ts, status="", sim_index=idx)
         with self._data_lock:
-            t = next((x for x in self._inbox if x["number"] == number), None)
-            if t:
-                t["messages"].append(msg)
-                t["unread"] = t.get("unread", 0) + 1
-            else:
-                self._inbox.insert(0, {
-                    "id": number, "thread_id": number, "name": number,
-                    "number": number, "color": "#059669",
-                    "messages": [msg], "unread": 1,
-                })
-        self._save_store()
+            self._inbox = db.messages_get_inbox()
         self._push(json.dumps({"type": "sms", "from": number,
                                "name": number, "preview": text}))
 
@@ -562,7 +518,7 @@ class ModemDriver:
                             already = ex and any(x["id"] == m["id"]
                                                  for x in ex["messages"])
                         if not already:
-                            self._handle_new_sms(m["id"])
+                            self._handle_new_sms(m.get("sim_index", m["id"]))
             except Exception as e:
                 log.warning("Poll error: %s", e)
 

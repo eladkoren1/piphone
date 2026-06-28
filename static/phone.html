@@ -214,6 +214,7 @@ async function init() {
   }
   // SSE handlers
   SSE.on("ring", d => {
+    if (rejecting) return;  // ignore RING during/after reject
     const number = d.from || "";
     digits = number;
     updateDisplay();
@@ -292,7 +293,8 @@ function showCallScreen(number, direction) {
   }
 }
 
-let clccPoll = null;
+let clccPoll   = null;
+let rejecting  = false;  // guard against RING URC re-showing screen during reject
 
 function startClccPoll() {
   let attempts = 0;
@@ -341,22 +343,23 @@ async function answerCall() {
 }
 
 async function hangup() {
-  // stop all polling first so nothing re-queues before ATH
   clearInterval(callTimer);
   clearInterval(clccPoll);
-  clccPoll  = null;
-  callTimer = null;
-  // reset UI immediately — don't wait for network
+  clccPoll   = null;
+  callTimer  = null;
+  rejecting  = true;   // block RING URCs from re-showing screen
+  // reset UI immediately
   document.getElementById("viewCall").classList.add("hidden");
   document.getElementById("viewDial").classList.remove("hidden");
   digits = "";
   updateDisplay();
-  // send ATH — fire and forget, UI already reset
   try {
     const r = await fetch("/api/call/hangup", {method:"POST"});
     const d = await r.json();
     if (!d.ok) toast("Hangup may have failed");
   } catch(e) { toast("Backend unreachable"); }
+  // clear guard after 3s — enough time for RING URCs to stop
+  setTimeout(() => { rejecting = false; }, 3000);
   loadCallLog();
 }
 

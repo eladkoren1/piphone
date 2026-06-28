@@ -84,11 +84,15 @@
         <h3 id="editTitle">New contact</h3>
         <button class="ibtn" onclick="hideEdit()"><i class="ti ti-x"></i></button>
       </div>
-      <div class="field-label">Name</div>
-      <input id="editName" placeholder="Full name" oninput="updateEditAv()" />
+      <div class="field-label">First name</div>
+      <input id="editFirstName" placeholder="First name" oninput="updateEditAv()" />
+      <div class="field-label">Last name</div>
+      <input id="editLastName" placeholder="Last name" oninput="updateEditAv()" />
       <div class="field-label">Number</div>
-      <input id="editNum"  placeholder="054..." type="tel" oninput="updateEditHint()" />
+      <input id="editNum" placeholder="054..." type="tel" oninput="updateEditHint()" />
       <div id="editHint" style="font-size:10px;color:var(--green);margin-top:4px;min-height:14px"></div>
+      <div class="field-label">Email</div>
+      <input id="editEmail" placeholder="email@example.com" type="email" />
       <div class="field-label">Color</div>
       <div class="color-row" id="colorRow"></div>
       <div class="btn-row">

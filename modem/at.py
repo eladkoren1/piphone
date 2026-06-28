@@ -140,10 +140,11 @@ class ModemDriver:
                             _, sms_number, sms_text, resp_q = item
                             log.info("→ SMS to %s", sms_number)
                             # encode number as UCS-2 hex for modem
-                            # number stays as plain E.164 — only body is UCS-2
+                            # number must also be UCS-2 encoded in CSCS=UCS2 mode
+                            enc_number = ucs2_encode(sms_number)
                             # step 1: send AT+CMGS
                             self._ser.write(
-                                f'AT+CMGS="{sms_number}"\r\n'.encode())
+                                f'AT+CMGS="{enc_number}"\r\n'.encode())
                             resp_lines = []
                             sms_phase  = 1   # waiting for >
                             sms_text_pending = sms_text

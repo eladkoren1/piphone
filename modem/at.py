@@ -308,7 +308,7 @@ class ModemDriver:
         time.sleep(0.3)
         for cmd in ("ATE0", "AT+CMEE=2", "AT+CMGF=1",
                     'AT+CSCS="UCS2"',
-                    "AT+CSMP=17,167,0,8",
+                    "AT+CSMP=1,167,0,8",
                     "AT+CNMI=2,1,0,0,0", "AT+CLIP=1"):
             r = self._cmd(cmd)
             log.info("%s → %s", cmd, r)

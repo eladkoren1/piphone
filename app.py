@@ -159,6 +159,43 @@ def events():
                     headers={"Cache-Control": "no-cache",
                              "X-Accel-Buffering": "no"})
 
+# ── Data / airplane mode ─────────────────────────────────────────────────────
+
+import subprocess
+
+_data_state = {"connected": False, "ip": None, "iface": None}
+
+@app.route("/api/modem/data-up", methods=["POST"])
+def data_up():
+    """Called by wwan-up.sh when data connects."""
+    b = request.get_json(force=True)
+    _data_state.update({"connected": True,
+                         "ip": b.get("ip"), "iface": b.get("iface")})
+    return jsonify({"ok": True})
+
+@app.route("/api/modem/data-down", methods=["POST"])
+def data_down():
+    """Called by wwan-down.sh when data disconnects."""
+    _data_state.update({"connected": False, "ip": None, "iface": None})
+    return jsonify({"ok": True})
+
+@app.route("/api/modem/data-status")
+def data_status():
+    return jsonify(_data_state)
+
+@app.route("/api/modem/airplane", methods=["POST"])
+def airplane():
+    """Toggle airplane mode (stops/starts wwan.service)."""
+    b      = request.get_json(force=True)
+    enable = b.get("enable", True)   # True = airplane ON (data OFF)
+    action = "stop" if enable else "start"
+    try:
+        subprocess.run(["systemctl", action, "wwan.service"],
+                       timeout=30, check=True)
+        return jsonify({"ok": True, "airplane": enable})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)})
+
 @app.after_request
 def no_cache(r):
     r.headers["Cache-Control"] = "no-store, no-cache, must-revalidate, max-age=0"

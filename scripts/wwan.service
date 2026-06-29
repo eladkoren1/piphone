@@ -1,0 +1,15 @@
+[Unit]
+Description=SIM7600G-H mobile data connection
+After=network.target
+Wants=network.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/opt/piphone/scripts/wwan-up.sh
+ExecStop=/opt/piphone/scripts/wwan-down.sh
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

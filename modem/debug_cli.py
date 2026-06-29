@@ -206,6 +206,8 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="piphone modem debug CLI")
     parser.add_argument("--port", default=None,
                         help="Serial port (default: auto-detect)")
+    parser.add_argument("--cmd", default=None,
+                        help="Run a single AT command and exit (e.g. --cmd 'AT+CGACT?')")
     args = parser.parse_args()
 
     print(info("Connecting to modem..."))
@@ -214,5 +216,17 @@ if __name__ == "__main__":
     except Exception as e:
         print(err(f"Failed to connect: {e}"))
         sys.exit(1)
+
+    if args.cmd:
+        # single command mode — run and exit
+        print(info(f"Running: {args.cmd}"))
+        t0    = time.time()
+        lines = modem._cmd(args.cmd, timeout=15)
+        ms    = int((time.time() - t0) * 1000)
+        for line in lines:
+            print(ok(line) if line == "OK" else err(line) if "ERROR" in line else line)
+        print(info(f"({ms}ms)"))
+        modem.close()
+        sys.exit(0)
 
     run(modem)

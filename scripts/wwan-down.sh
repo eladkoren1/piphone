@@ -12,6 +12,10 @@ if [ -f /tmp/qmi-network-state-cdc-wdm0 ]; then
     qmi-network "$WDM" stop 2>/dev/null || true
 fi
 
+# remove wwan0 DNS entries
+sed -i '/# wwan0-dns/d' /etc/resolv.conf
+$LOG "Removed wwan0 DNS entries"
+
 # remove wwan0 default route explicitly so wlan0 takes over
 ip route del default dev "$IFACE" 2>/dev/null || true
 # flush IP and bring interface down

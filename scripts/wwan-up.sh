@@ -97,6 +97,22 @@ else
     ip route add default dev "$IFACE" metric 100
 fi
 
+# add DNS for wwan0
+$LOG "Adding wwan0 DNS..."
+RESOLV=$(readlink -f /etc/resolv.conf)
+$LOG "resolv.conf -> $RESOLV"
+if [[ "$RESOLV" == *"systemd"* ]] || [[ "$RESOLV" == *"stub"* ]]; then
+    # systemd-resolved: add via resolvectl
+    resolvectl dns "$IFACE" 8.8.8.8 8.8.4.4 2>/dev/null &&         $LOG "DNS set via resolvectl" ||         $LOG "resolvectl failed, falling back"
+fi
+# always also write directly (works for both NM and systemd-resolved)
+sed -i '/# wwan0-dns/d' /etc/resolv.conf 2>/dev/null || true
+printf "nameserver 8.8.8.8 # wwan0-dns
+nameserver 8.8.4.4 # wwan0-dns
+"     >> /etc/resolv.conf 2>/dev/null || true
+# tell NM to not overwrite resolv.conf for wwan0
+nmcli dev set "$IFACE" managed no 2>/dev/null || true
+
 # verify
 IP=$(ip addr show "$IFACE" | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
 if [ -n "$IP" ]; then

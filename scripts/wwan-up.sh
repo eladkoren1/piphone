@@ -49,12 +49,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-# snapshot resolv.conf before udhcpc so we can tag new entries after
-RESOLV_BEFORE=$(cat /etc/resolv.conf 2>/dev/null)
-
-# get IP via DHCP
+# get IP via DHCP — custom script skips DNS so NM resolv.conf is untouched
 $LOG "Getting IP via udhcpc..."
-udhcpc -i "$IFACE" -q -f -t 5 -T 3
+udhcpc -i "$IFACE" -q -f -t 5 -T 3 -s /opt/piphone/scripts/udhcpc-wwan.sh
 
 if [ $? -ne 0 ]; then
     $LOG "udhcpc failed, trying to set IP manually via AT+CGPADDR"
@@ -100,29 +97,23 @@ else
     ip route add default dev "$IFACE" metric 100
 fi
 
-# tag any DNS lines udhcpc added so we can remove them on teardown
-while IFS= read -r line; do
-    if [[ "$line" == nameserver* ]] && ! echo "$RESOLV_BEFORE" | grep -qF "$line"; then
-        sed -i "s|^${line}$|${line} # wwan0-dns|" /etc/resolv.conf
-    fi
-done < /etc/resolv.conf
-$LOG "Tagged udhcpc DNS entries"
-
+# add DNS for wwan0 — use carrier DNS from udhcpc if available, else Google
+CARRIER_DNS=$(cat /tmp/wwan0-dns 2>/dev/null | tr ' ' '
+' | head -2)
 # add DNS for wwan0
 $LOG "Adding wwan0 DNS..."
-RESOLV=$(readlink -f /etc/resolv.conf)
-$LOG "resolv.conf -> $RESOLV"
-if [[ "$RESOLV" == *"systemd"* ]] || [[ "$RESOLV" == *"stub"* ]]; then
-    # systemd-resolved: add via resolvectl
-    resolvectl dns "$IFACE" 8.8.8.8 8.8.4.4 2>/dev/null &&         $LOG "DNS set via resolvectl" ||         $LOG "resolvectl failed, falling back"
-fi
-# always also write directly (works for both NM and systemd-resolved)
 sed -i '/# wwan0-dns/d' /etc/resolv.conf 2>/dev/null || true
-printf "nameserver 8.8.8.8 # wwan0-dns
+if [ -n "$CARRIER_DNS" ]; then
+    while read -r dns_ip; do
+        [ -n "$dns_ip" ] && echo "nameserver $dns_ip # wwan0-dns" >> /etc/resolv.conf
+    done <<< "$CARRIER_DNS"
+    $LOG "Added carrier DNS: $CARRIER_DNS"
+else
+    printf "nameserver 8.8.8.8 # wwan0-dns
 nameserver 8.8.4.4 # wwan0-dns
-"     >> /etc/resolv.conf 2>/dev/null || true
-# tell NM to not overwrite resolv.conf for wwan0
-nmcli dev set "$IFACE" managed no 2>/dev/null || true
+" >> /etc/resolv.conf
+    $LOG "Added fallback DNS: 8.8.8.8 8.8.4.4"
+fi
 
 # verify
 IP=$(ip addr show "$IFACE" | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)

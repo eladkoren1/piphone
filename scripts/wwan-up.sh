@@ -49,6 +49,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
+# snapshot resolv.conf before udhcpc so we can tag new entries after
+RESOLV_BEFORE=$(cat /etc/resolv.conf 2>/dev/null)
+
 # get IP via DHCP
 $LOG "Getting IP via udhcpc..."
 udhcpc -i "$IFACE" -q -f -t 5 -T 3
@@ -96,6 +99,14 @@ if [ -n "$GW" ]; then
 else
     ip route add default dev "$IFACE" metric 100
 fi
+
+# tag any DNS lines udhcpc added so we can remove them on teardown
+while IFS= read -r line; do
+    if [[ "$line" == nameserver* ]] && ! echo "$RESOLV_BEFORE" | grep -qF "$line"; then
+        sed -i "s|^${line}$|${line} # wwan0-dns|" /etc/resolv.conf
+    fi
+done < /etc/resolv.conf
+$LOG "Tagged udhcpc DNS entries"
 
 # add DNS for wwan0
 $LOG "Adding wwan0 DNS..."

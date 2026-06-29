@@ -45,6 +45,17 @@ qmicli -p -d "$WDM" \
 $LOG "Getting IP via udhcpc..."
 udhcpc -i "$IFACE" -q -f
 
+# set wwan0 default route with lower metric than wlan0 (600)
+# so wwan0 is preferred but wlan0 takes over when wwan0 is down
+$LOG "Setting wwan0 default route with metric 100..."
+ip route del default dev "$IFACE" 2>/dev/null || true
+GW=$(ip route show dev "$IFACE" | grep default | awk '{print $3}' | head -1)
+if [ -n "$GW" ]; then
+    ip route add default via "$GW" dev "$IFACE" metric 100
+else
+    ip route add default dev "$IFACE" metric 100
+fi
+
 # verify and notify piphone
 IP=$(ip addr show "$IFACE" | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
 if [ -n "$IP" ]; then

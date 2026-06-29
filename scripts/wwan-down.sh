@@ -12,6 +12,8 @@ if [ -f /tmp/qmi-network-state-cdc-wdm0 ]; then
     qmi-network "$WDM" stop 2>/dev/null || true
 fi
 
+# remove wwan0 default route explicitly so wlan0 takes over
+ip route del default dev "$IFACE" 2>/dev/null || true
 # flush IP and bring interface down
 ip addr flush dev "$IFACE" 2>/dev/null || true
 ip link set "$IFACE" down 2>/dev/null || true

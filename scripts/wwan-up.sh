@@ -1,5 +1,8 @@
 #!/bin/bash
-# wwan-up.sh — bring up SIM7600G-H data connection (fallback only)
+# wwan-up.sh — bring up SIM7600G-H data connection.
+# IP is read directly from the modem via AT+CGPADDR (no DHCP, no udhcpc).
+# Routing is NOT touched by this script — manage manually:
+#   ip route add 0.0.0.0/0 via <gw> dev wwan0 metric 200
 
 LOG="logger -t wwan-up"
 WDM="/dev/cdc-wdm0"
@@ -44,12 +47,9 @@ if [ $? -ne 0 ]; then
     exit 1
 fi
 
-$LOG "Getting IP via udhcpc..."
-udhcpc -i "$IFACE" -q -f -t 5 -T 3 -s /opt/piphone/scripts/udhcpc-wwan.sh
-
-if [ $? -ne 0 ]; then
-    $LOG "udhcpc failed, trying to set IP manually via AT+CGPADDR"
-    IP=$(python3 -c "
+# read IP directly from the modem via AT — no DHCP involved
+$LOG "Reading IP from modem via AT+CGPADDR..."
+IP=$(python3 -c "
 import sys
 sys.path.insert(0, '/opt/piphone')
 from modem.at import find_modem_port, ModemDriver
@@ -71,23 +71,16 @@ except Exception:
     sys.exit(1)
 " 2>/dev/null)
 
-    if [ -n "$IP" ] && [ "$IP" != "0.0.0.0" ]; then
-        $LOG "Got IP from modem: $IP, setting manually"
-        ip addr flush dev "$IFACE" 2>/dev/null || true
-        ip addr add "$IP/32" dev "$IFACE"
-    else
-        $LOG "ERROR: Could not get IP"
-        exit 1
-    fi
-fi
-
-IP=$(ip addr show "$IFACE" | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
-if [ -n "$IP" ]; then
-    $LOG "Connected: $IP on $IFACE"
-    curl -s -X POST http://localhost:5000/api/modem/data-up \
-        -H "Content-Type: application/json" \
-        -d "{\"ip\":\"$IP\",\"iface\":\"$IFACE\"}" 2>/dev/null || true
-else
-    $LOG "ERROR: No IP assigned"
+if [ -z "$IP" ] || [ "$IP" = "0.0.0.0" ]; then
+    $LOG "ERROR: Could not get IP from modem"
     exit 1
 fi
+
+$LOG "Got IP from modem: $IP"
+ip addr flush dev "$IFACE" 2>/dev/null || true
+ip addr add "$IP/32" dev "$IFACE"
+
+$LOG "Connected: $IP on $IFACE"
+curl -s -X POST http://localhost:5000/api/modem/data-up \
+    -H "Content-Type: application/json" \
+    -d "{\"ip\":\"$IP\",\"iface\":\"$IFACE\"}" 2>/dev/null || true

@@ -11,9 +11,9 @@ $LOG "Bringing down wwan0..."
 rm -f /tmp/qmi-network-state-cdc-wdm0
 qmi-network "$WDM" stop 2>/dev/null || true
 
-# remove default route — wlan0 takes over automatically
-ip route del default dev "$IFACE" metric 100 2>/dev/null || true
-ip route del default dev "$IFACE" 2>/dev/null || true
+# remove our static 0.0.0.0/0 fallback route only — never touch the
+# real default route (br0/wlan0), which we never modified in the first place
+ip route del 0.0.0.0/0 dev "$IFACE" metric 900 2>/dev/null || true
 
 # bring interface down — NM will regenerate resolv.conf from remaining connections
 ip addr flush dev "$IFACE" 2>/dev/null || true

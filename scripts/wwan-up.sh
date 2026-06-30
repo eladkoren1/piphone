@@ -97,24 +97,6 @@ else
     ip route add default dev "$IFACE" metric 100
 fi
 
-# add DNS for wwan0 — use carrier DNS from udhcpc if available, else Google
-CARRIER_DNS=$(cat /tmp/wwan0-dns 2>/dev/null | tr ' ' '
-' | head -2)
-# add DNS for wwan0
-$LOG "Adding wwan0 DNS..."
-sed -i '/# wwan0-dns/d' /etc/resolv.conf 2>/dev/null || true
-if [ -n "$CARRIER_DNS" ]; then
-    while read -r dns_ip; do
-        [ -n "$dns_ip" ] && echo "nameserver $dns_ip # wwan0-dns" >> /etc/resolv.conf
-    done <<< "$CARRIER_DNS"
-    $LOG "Added carrier DNS: $CARRIER_DNS"
-else
-    printf "nameserver 8.8.8.8 # wwan0-dns
-nameserver 8.8.4.4 # wwan0-dns
-" >> /etc/resolv.conf
-    $LOG "Added fallback DNS: 8.8.8.8 8.8.4.4"
-fi
-
 # verify
 IP=$(ip addr show "$IFACE" | grep 'inet ' | awk '{print $2}' | cut -d/ -f1)
 if [ -n "$IP" ]; then

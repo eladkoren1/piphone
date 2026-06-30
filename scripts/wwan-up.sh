@@ -75,8 +75,6 @@ except Exception:
         $LOG "Got IP from modem: $IP, setting manually"
         ip addr flush dev "$IFACE" 2>/dev/null || true
         ip addr add "$IP/32" dev "$IFACE"
-        # no gateway known via AT fallback — add as fallback default only
-        ip route add default dev "$IFACE" metric 900 2>/dev/null || true
     else
         $LOG "ERROR: Could not get IP"
         exit 1

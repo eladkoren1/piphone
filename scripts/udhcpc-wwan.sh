@@ -1,13 +1,13 @@
 #!/bin/sh
-# udhcpc hook for wwan0 — configure IP/route only, skip DNS
-# udhcpc calls this with $1 = bound|renew|deconfig|leasefail
+# udhcpc hook for wwan0 — sole owner of wwan0's IP + default route.
+# Mobile data is FALLBACK ONLY: metric 900, always higher (lower
+# priority) than wired/wifi connections (typically metric 100-600).
 
 case "$1" in
     bound|renew)
-        # set IP
         ip addr flush dev "$interface" 2>/dev/null
         ip addr add "$ip/${mask:-32}" dev "$interface"
-        # set default route with metric 900 (higher than wlan0/br0 ~600 — data is fallback only)
+
         ip route del default dev "$interface" 2>/dev/null || true
         if [ -n "$router" ]; then
             ip route add default via "$router" dev "$interface" metric 900

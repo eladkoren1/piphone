@@ -88,13 +88,13 @@ except Exception as e:
     fi
 fi
 
-# set wwan0 as preferred default route (metric 100 < wlan0 metric 600)
+# set wwan0 as fallback default route (metric 900 > wlan0/br0 ~100-600)
 ip route del default dev "$IFACE" 2>/dev/null || true
 GW=$(ip route show dev "$IFACE" | grep default | awk '{print $3}' | head -1)
 if [ -n "$GW" ]; then
-    ip route add default via "$GW" dev "$IFACE" metric 100
+    ip route add default via "$GW" dev "$IFACE" metric 900
 else
-    ip route add default dev "$IFACE" metric 100
+    ip route add default dev "$IFACE" metric 900
 fi
 
 # verify

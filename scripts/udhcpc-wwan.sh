@@ -7,12 +7,12 @@ case "$1" in
         # set IP
         ip addr flush dev "$interface" 2>/dev/null
         ip addr add "$ip/${mask:-32}" dev "$interface"
-        # set default route with metric 100 (lower than wlan0's 600)
+        # set default route with metric 900 (higher than wlan0/br0 ~600 — data is fallback only)
         ip route del default dev "$interface" 2>/dev/null || true
         if [ -n "$router" ]; then
-            ip route add default via "$router" dev "$interface" metric 100
+            ip route add default via "$router" dev "$interface" metric 900
         else
-            ip route add default dev "$interface" metric 100
+            ip route add default dev "$interface" metric 900
         fi
         ;;
     deconfig)

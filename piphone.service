@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=pi
-WorkingDirectory=/home/pi/piphone
-ExecStart=/home/pi/piphone/venv/bin/python app.py
+User=root
+WorkingDirectory=/opt/piphone
+ExecStart=/opt/piphone/phonevenv/bin/python app.py
 Restart=on-failure
 RestartSec=3
 

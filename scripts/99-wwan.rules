@@ -1,9 +1,0 @@
-# udev rule: auto-run wwan-up.sh when SIM7600G-H is plugged in
-# Vendor: Qualcomm/SimTech 1e0e:9001
-ACTION=="add", SUBSYSTEM=="usb", \
-    ATTR{idVendor}=="1e0e", ATTR{idProduct}=="9001", \
-    RUN+="/bin/systemctl start wwan.service"
-
-ACTION=="remove", SUBSYSTEM=="usb", \
-    ATTR{idVendor}=="1e0e", ATTR{idProduct}=="9001", \
-    RUN+="/bin/systemctl stop wwan.service"

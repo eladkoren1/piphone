@@ -79,23 +79,23 @@
         </div>
         <span class="app-label">Settings</span>
       </div>
-      <div class="app-icon" onclick="toast('Data coming soon')">
-        <div class="icon-wrap" style="background:#0891b2">
-          <i class="ti ti-wifi"></i>
+      <div class="app-icon" onclick="toggleData()" id="dataIcon">
+        <div class="icon-wrap" style="background:#0891b2" id="dataWrap">
+          <i class="ti ti-antenna-bars-5" id="dataIco"></i>
         </div>
-        <span class="app-label">Data</span>
+        <span class="app-label" id="dataLabel">Data</span>
+      </div>
+      <div class="app-icon" onclick="toggleWifi()" id="wifiIcon">
+        <div class="icon-wrap" style="background:#0891b2" id="wifiWrap">
+          <i class="ti ti-wifi" id="wifiIco"></i>
+        </div>
+        <span class="app-label" id="wifiLabel">Wi-Fi</span>
       </div>
       <div class="app-icon" onclick="toast('USSD coming soon')">
         <div class="icon-wrap" style="background:#b45309">
           <i class="ti ti-hash"></i>
         </div>
         <span class="app-label">USSD</span>
-      </div>
-      <div class="app-icon" onclick="toggleAirplane()" id="airplaneIcon">
-        <div class="icon-wrap" style="background:#475569" id="airplaneWrap">
-          <i class="ti ti-plane" id="airplaneIco"></i>
-        </div>
-        <span class="app-label" id="airplaneLabel">Data</span>
       </div>
     </div>
   </div>
@@ -126,6 +126,82 @@ checkUnread();setInterval(checkUnread,15000);
 SSE.on("sms",d=>{checkUnread();toast("SMS: "+(d.name||d.from),3000)});
 SSE.on("ring",d=>{toast("Incoming: "+(d.from||"unknown"),5000)});
 SSE.connect();
+
+// data toggle
+async function checkDataStatus() {
+  try {
+    const s = await (await fetch("/api/modem/data-status")).json();
+    const wrap  = document.getElementById("dataWrap");
+    const ico   = document.getElementById("dataIco");
+    const label = document.getElementById("dataLabel");
+    if (s.connected) {
+      wrap.style.background = "#16a34a";
+      ico.className = "ti ti-antenna-bars-5";
+      label.textContent = s.ip || "Data on";
+    } else {
+      wrap.style.background = "#475569";
+      ico.className = "ti ti-antenna-bars-off";
+      label.textContent = "Data off";
+    }
+  } catch(e) {}
+}
+checkDataStatus(); setInterval(checkDataStatus, 10000);
+
+let dataBusy = false;
+async function toggleData() {
+  if (dataBusy) return;
+  dataBusy = true;
+  try {
+    const s = await (await fetch("/api/modem/data-status")).json();
+    const wantEnable = !s.connected;
+    toast(wantEnable ? "Enabling data..." : "Disabling data...", 2000);
+    await fetch("/api/modem/data-toggle", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({enable: wantEnable})
+    });
+    setTimeout(checkDataStatus, 2000);
+  } catch(e) { toast("Failed"); }
+  dataBusy = false;
+}
+
+// wifi toggle
+async function checkWifiStatus() {
+  try {
+    const s = await (await fetch("/api/modem/wifi-status")).json();
+    const wrap  = document.getElementById("wifiWrap");
+    const ico   = document.getElementById("wifiIco");
+    const label = document.getElementById("wifiLabel");
+    if (s.enabled) {
+      wrap.style.background = "#0891b2";
+      ico.className = "ti ti-wifi";
+      label.textContent = "Wi-Fi";
+    } else {
+      wrap.style.background = "#475569";
+      ico.className = "ti ti-wifi-off";
+      label.textContent = "Wi-Fi off";
+    }
+  } catch(e) {}
+}
+checkWifiStatus(); setInterval(checkWifiStatus, 10000);
+
+let wifiBusy = false;
+async function toggleWifi() {
+  if (wifiBusy) return;
+  wifiBusy = true;
+  try {
+    const s = await (await fetch("/api/modem/wifi-status")).json();
+    const wantEnable = !s.enabled;
+    toast(wantEnable ? "Enabling Wi-Fi..." : "Disabling Wi-Fi...", 2000);
+    await fetch("/api/modem/wifi-toggle", {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({enable: wantEnable})
+    });
+    setTimeout(checkWifiStatus, 2000);
+  } catch(e) { toast("Failed"); }
+  wifiBusy = false;
+}
 </script>
 </body>
 </html>

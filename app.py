@@ -159,42 +159,64 @@ def events():
                     headers={"Cache-Control": "no-cache",
                              "X-Accel-Buffering": "no"})
 
-# ── Data / airplane mode ─────────────────────────────────────────────────────
+# ── Data / WiFi control (via nmcli, no custom scripts/services) ───────────────
 
 import subprocess
 
-_data_state = {"connected": False, "ip": None, "iface": None}
+GSM_CON = "piphone-wwan"
 
-@app.route("/api/modem/data-up", methods=["POST"])
-def data_up():
-    """Called by wwan-up.sh when data connects."""
-    b = request.get_json(force=True)
-    _data_state.update({"connected": True,
-                         "ip": b.get("ip"), "iface": b.get("iface")})
-    return jsonify({"ok": True})
-
-@app.route("/api/modem/data-down", methods=["POST"])
-def data_down():
-    """Called by wwan-down.sh when data disconnects."""
-    _data_state.update({"connected": False, "ip": None, "iface": None})
-    return jsonify({"ok": True})
+def _nmcli(*args, timeout=20):
+    try:
+        r = subprocess.run(["nmcli", *args], timeout=timeout,
+                           capture_output=True, text=True)
+        return {"ok": r.returncode == 0,
+                "stdout": r.stdout.strip(), "stderr": r.stderr.strip()}
+    except Exception as e:
+        return {"ok": False, "error": str(e)}
 
 @app.route("/api/modem/data-status")
 def data_status():
-    return jsonify(_data_state)
+    r = subprocess.run(
+        ["nmcli", "-t", "-f", "NAME,DEVICE,STATE", "con", "show", "--active"],
+        capture_output=True, text=True, timeout=10)
+    connected = False
+    ip = None
+    for line in r.stdout.strip().splitlines():
+        parts = line.split(":")
+        if len(parts) >= 3 and parts[0] == GSM_CON:
+            connected = True
+    if connected:
+        ipr = subprocess.run(["nmcli", "-t", "-f", "IP4.ADDRESS",
+                              "con", "show", GSM_CON],
+                             capture_output=True, text=True, timeout=10)
+        for line in ipr.stdout.strip().splitlines():
+            if line.startswith("IP4.ADDRESS"):
+                ip = line.split(":", 1)[1].split("/")[0]
+                break
+    return jsonify({"connected": connected, "ip": ip, "iface": "wwan0"})
 
-@app.route("/api/modem/airplane", methods=["POST"])
-def airplane():
-    """Toggle airplane mode (stops/starts wwan.service)."""
-    b      = request.get_json(force=True)
-    enable = b.get("enable", True)   # True = airplane ON (data OFF)
-    action = "stop" if enable else "start"
-    try:
-        subprocess.run(["systemctl", action, "wwan.service"],
-                       timeout=30, check=True)
-        return jsonify({"ok": True, "airplane": enable})
-    except Exception as e:
-        return jsonify({"ok": False, "error": str(e)})
+@app.route("/api/modem/data-toggle", methods=["POST"])
+def data_toggle():
+    """Body: {enable: true|false} — bring the GSM connection up/down."""
+    b = request.get_json(force=True)
+    enable = b.get("enable", True)
+    result = _nmcli("con", "up" if enable else "down", GSM_CON, timeout=30)
+    return jsonify(result)
+
+@app.route("/api/modem/wifi-toggle", methods=["POST"])
+def wifi_toggle():
+    """Body: {enable: true|false} — nmcli radio wifi on/off."""
+    b = request.get_json(force=True)
+    enable = b.get("enable", True)
+    result = _nmcli("radio", "wifi", "on" if enable else "off")
+    return jsonify(result)
+
+@app.route("/api/modem/wifi-status")
+def wifi_status():
+    r = subprocess.run(["nmcli", "-t", "-f", "WIFI", "radio"],
+                       capture_output=True, text=True, timeout=10)
+    enabled = r.stdout.strip().lower() == "enabled"
+    return jsonify({"enabled": enabled})
 
 @app.after_request
 def no_cache(r):

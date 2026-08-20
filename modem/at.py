@@ -14,6 +14,7 @@ import json, uuid as _uuid_mod, logging
 import os, sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 import db
+from modem.audio_bridge import AudioBridge
 
 log = logging.getLogger("modem.at")
 
@@ -105,6 +106,7 @@ class ModemDriver:
                              "direction": None, "started": None}
         self._inbox = []
         self._running = True
+        self._audio = AudioBridge()
 
         self._ser = serial.Serial(port, baudrate, timeout=0.05)
 
@@ -300,6 +302,11 @@ class ModemDriver:
             # run in a separate thread so modem_loop stays responsive
             threading.Thread(target=self._handle_new_sms,
                              args=(idx,), daemon=True).start()
+        elif line.startswith("VOICE CALL: BEGIN"):
+            # call is connected (either side answered) — start audio
+            threading.Thread(target=self._start_audio, daemon=True).start()
+        elif line.startswith("VOICE CALL: END"):
+            threading.Thread(target=self._stop_audio, daemon=True).start()
         elif line == "RING":
             with self._data_lock:
                 if not self._call_state.get("active"):
@@ -314,6 +321,7 @@ class ModemDriver:
             self._push(json.dumps({"type": "ring", "from": number,
                                    "name": number}))
         elif line in CALL_END:
+            threading.Thread(target=self._stop_audio, daemon=True).start()
             with self._data_lock:
                 cs = dict(self._call_state)
                 self._call_state = {"active": False, "number": None,
@@ -489,7 +497,26 @@ class ModemDriver:
         with self._data_lock:
             self._call_state = {"active": False, "number": None,
                                 "direction": None, "started": None}
+        self._stop_audio()
         return {"ok": self._ok(lines)}
+
+    def _start_audio(self):
+        """Called on VOICE CALL: BEGIN — enable PCM streaming and bridge."""
+        try:
+            self._cmd("AT+CPCMREG=1", timeout=5)
+            ok = self._audio.start()
+            if not ok:
+                log.error("Audio bridge failed to start")
+        except Exception as e:
+            log.error("_start_audio error: %s", e)
+
+    def _stop_audio(self):
+        """Called on VOICE CALL: END / hangup — disable PCM and bridge."""
+        try:
+            self._audio.stop()
+            self._cmd("AT+CPCMREG=0", timeout=5)
+        except Exception as e:
+            log.error("_stop_audio error: %s", e)
 
     def answer(self):
         lines = self._cmd("ATA")

@@ -1,0 +1,7 @@
+--- a/77-mm-simtech-port-types.rules
++++ b/77-mm-simtech-port-types.rules
+@@ SIM7000, SIM7100, SIM7600...
+ ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9001", ENV{.MM_USBIFNUM}=="02", SUBSYSTEM=="tty", ENV{ID_MM_PORT_TYPE_AT_PRIMARY}="1"
+-ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9001", ENV{.MM_USBIFNUM}=="03", SUBSYSTEM=="tty", ENV{ID_MM_PORT_TYPE_AT_SECONDARY}="1"
++ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9001", ENV{.MM_USBIFNUM}=="03", ENV{ID_MM_PORT_IGNORE}="1"
+ ATTRS{idVendor}=="1e0e", ATTRS{idProduct}=="9001", ENV{.MM_USBIFNUM}=="04", SUBSYSTEM=="tty", ENV{ID_MM_PORT_TYPE_AUDIO}="1"

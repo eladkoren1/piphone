@@ -31,9 +31,20 @@ def find_modem_port(baudrate=115200, timeout=1.0):
     """
     Probe each /dev/ttyUSB* port and return the first one
     that responds to AT with OK. Returns None if not found.
+
+    ttyUSB3 is tried first — on the SIM7600G-H, ModemManager's own
+    udev rules tag ttyUSB2 as AT_PRIMARY (MM polls it continuously)
+    and ttyUSB3 as AT_SECONDARY. We patch MM's rules (see
+    scripts/fix-mm-simtech-port.sh) to make MM ignore ttyUSB3
+    entirely, freeing it for piphone's exclusive use. Trying it
+    first avoids wasting a full probe timeout on ttyUSB2, which MM
+    may be mid-poll on and slow/silent to respond.
     """
     import glob, serial, time
-    candidates = sorted(glob.glob("/dev/ttyUSB*"))
+    all_ports = sorted(glob.glob("/dev/ttyUSB*"))
+    # ttyUSB3 first (piphone's dedicated port), then the rest in order
+    candidates = [p for p in all_ports if p.endswith("USB3")] + \
+                 [p for p in all_ports if not p.endswith("USB3")]
     log.info("Probing ports: %s", candidates)
     for port in candidates:
         try:
